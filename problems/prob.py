@@ -1,5 +1,6 @@
 from abc import abstractmethod
 
+import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -12,9 +13,8 @@ class Prob:
     def gen_inst(self, key):
         pass
 
-    @abstractmethod
     def sol_inst(self, prob_inst):
-        pass
+        return 0
 
 
 class Efn:
@@ -23,10 +23,10 @@ class Efn:
 
 class ConvEfn(Efn):
     def __init__(self):
-        print("[compile] Generating energy function...")
+        print("[generate] Generating energy function...")
         (self.energy_expr, self.spins) = self._gen_exprs()
 
-        print("[compile] Calculating symbolic gradients...")
+        print("[generate] Calculating symbolic gradients...")
         self.grad_expr = sympy.Matrix(
             [sympy.diff(self.energy_expr, spin) for spin in self.spins]
         )
@@ -35,8 +35,8 @@ class ConvEfn(Efn):
         energy_expr = self.energy_expr.xreplace(sub_dict)
         grad_expr = self.grad_expr.xreplace(sub_dict)
 
-        energyfn = sympy.lambdify([self.spins], energy_expr, "jax")
-        gradfn = sympy.lambdify([self.spins], grad_expr, "jax")
+        gradfn = sympy.lambdify([self.spins], grad_expr, modules="jax", cse=True)
+        energyfn = sympy.lambdify([self.spins], energy_expr, modules="jax", cse=True)
 
         g = nx.Graph()
         for spin in self.spins:
@@ -54,10 +54,7 @@ class ConvEfn(Efn):
         masks[colors, np.arange(colors.size)] = 1
         masks = jnp.asarray(masks)
 
-        return energyfn, gradfn, masks
-
-    def sol_inst(self, prob_inst):
-        return 0
+        return energyfn, (lambda x, _: gradfn(x)), masks
 
     @abstractmethod
     def _gen_exprs(self):
@@ -65,4 +62,19 @@ class ConvEfn(Efn):
 
 
 class FuseEfn(Efn):
-    pass
+    def __init__(self):
+        print("[compile] Fuse Function! Nothing to generate...")
+        self.spins = 0
+
+    def compile(self, weights, circuitfn, masks=None):
+        def gradfn(state, mask):
+            z_state = jnp.where(mask, 0, state)
+            o_state = jnp.where(mask, 1, state)
+            return jnp.dot(weights, circuitfn(o_state) - circuitfn(z_state))
+
+        def energyfn(state):
+            return jnp.dot(weights, circuitfn(state))
+
+        if masks is None:
+            masks = jnp.asarray(np.eye(self.spins, dtype=np.bool_))
+        return energyfn, gradfn, masks

@@ -1,7 +1,10 @@
 import jax
+import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import sympy
+
+from circuit import PermuteNet
 
 from .prob import ConvEfn, FuseEfn, Prob
 
@@ -39,12 +42,28 @@ class TspConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class TspFuseEfn(ConvEfn):
+class TspFuseEfn(FuseEfn):
     def __init__(self, n):
         self.n = n
+        self.spins, permutefn = PermuteNet(self.n)
 
-    def energy(self):
-        pass
+        @jax.jit
+        def circuitfn(state):
+            spins = permutefn(state)
+            M = spins.T
+            M_p = jnp.roll(M, -1, axis=1).T
+
+            X = M @ M_p
+            V = (
+                X[jnp.triu_indices_from(X, k=1)].flatten()
+                + X[jnp.tril_indices_from(X, k=-1)].flatten()
+            )
+            return V
+
+        self.circuitfn = circuitfn
+
+    def compile(self, inst):
+        return super().compile(inst, self.circuitfn)
 
 
 class Tsp(Prob):
@@ -52,13 +71,16 @@ class Tsp(Prob):
         self.n = args.size
         self.minval = args.minval
         self.maxval = args.maxval
-        self.conv_efn = TspConvEfn(self.n, self.maxval)
+        if args.fuse:
+            self.efn = TspFuseEfn(self.n)
+        else:
+            self.efn = TspConvEfn(self.n, self.maxval)
         # self.fuse_efn = CutFuseEfn(self.n)
 
     def gen_inst(self, key):
         combos = self.n * (self.n - 1) // 2
         return np.asarray(
-            jax.random.uniform(
+            jax.random.randint(
                 key, shape=combos, minval=self.minval, maxval=self.maxval
             )
         ).astype(int)
@@ -66,6 +88,8 @@ class Tsp(Prob):
     def sol_inst(self, prob_inst):
         adj_mat = np.zeros(shape=(self.n, self.n))
         adj_mat[np.triu_indices_from(adj_mat, k=1)] = prob_inst
+        adj_mat += adj_mat.T
+
         g = nx.from_numpy_array(adj_mat)
         path = nx.approximation.traveling_salesman_problem(g)
         weight = sum(g[n][nbr]["weight"] for n, nbr in nx.utils.pairwise(path))

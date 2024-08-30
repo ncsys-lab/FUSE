@@ -41,7 +41,10 @@ class Cut(Prob):
     def __init__(self, args):
         self.n = args.size
         self.nu = args.connectivity
-        self.conv_efn = CutConvEfn(self.n)
+        if args.fuse:
+            self.efn = None
+        else:
+            self.efn = CutConvEfn(self.n)
         # self.fuse_efn = CutFuseEfn(self.n)
 
     def gen_inst(self, key):

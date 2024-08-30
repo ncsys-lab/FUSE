@@ -1,4 +1,7 @@
+from math import floor, log2
+
 import jax
+import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import sympy
@@ -38,20 +41,44 @@ class ColConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class ColFuseEfn(ConvEfn):
+class ColFuseEfn(FuseEfn):
     def __init__(self, n):
+        super().__init__()
         self.n = n
+        self.spins = 0
 
-    def energy(self):
-        pass
+    def compile(self, inst):
+        weights, chi = inst
+
+        m = floor(log2(chi))
+        vals = [1 << i for i in range(m)]
+        vals.append(chi - (1 << m))
+        vals = np.array(vals)
+
+        self.spins = self.n * (m + 1)
+
+        @jax.jit
+        def circuitfn(spins):
+            spins = spins.reshape((self.n, m + 1))
+            cols = spins @ vals
+
+            col_mat = jnp.zeros((self.n, chi))
+            col_mat = col_mat.at[cols].set(1)
+            idx1, idx2 = jnp.triu_indices(self.n, k=1)
+            return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
+
+        return super().compile(weights, circuitfn)
+        # return super().compile(weights, lambda x: circuit(x, self.n, chi, m, vals))
 
 
 class Col(Prob):
     def __init__(self, args):
         self.n = args.size
         self.nu = args.connectivity
-        self.conv_efn = ColConvEfn(self.n)
-        # self.fuse_efn = CutFuseEfn(self.n)
+        if args.fuse:
+            self.efn = ColFuseEfn(self.n)
+        else:
+            self.efn = ColConvEfn(self.n)
 
     def gen_inst(self, key):
         combos = self.n * (self.n - 1) // 2

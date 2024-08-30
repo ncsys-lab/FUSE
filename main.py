@@ -12,6 +12,7 @@ from log import Logger
 from problems.col import Col
 from problems.cut import Cut
 from problems.iso import Iso
+from problems.knp import Knp
 from problems.tsp import Tsp
 from util import print_cts_stats
 
@@ -37,8 +38,8 @@ def run(key, iters, prob, efn, beta_i, betafn):
     def inner_loop(pargs, i):
         (key, beta, state) = pargs
         key, subkey = jax.random.split(key)
-
-        grad = gradfn(state)
+        mask = masks[i % n_masks]
+        grad = gradfn(state, mask)
         energy = energyfn(state)
         if DEBUG:
             jax.debug.print(
@@ -49,8 +50,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
             )
         rand = jax.random.uniform(subkey)
         pos = (jax.nn.sigmoid(-beta * grad) - rand > 0).flatten()
-        curr_mask = masks[i % n_masks]
-        new_state = jnp.where(curr_mask, pos, state)
+        new_state = jnp.where(mask, pos, state)
         beta = betafn(beta)
         return (key, beta, new_state), (new_state, energy)
 
@@ -64,9 +64,11 @@ def run(key, iters, prob, efn, beta_i, betafn):
     _, trace = jax.lax.scan(inner_loop, init_pargs, x, iters)
 
     bits, energies = trace
+    # print(bits[jnp.argmin(energies)])
+    # print(jnp.min(energies))
     gated = energies <= prob_sol
     succ = jnp.sum(gated) > 0
-    cts = jnp.argmax(gated) if succ else -1
+    cts = jnp.argmax(gated) if succ else jnp.array(-1)
     return (
         prob_sol,
         succ,
@@ -77,8 +79,11 @@ def run(key, iters, prob, efn, beta_i, betafn):
 
 def execute(Prob, args):
     key = jax.random.key(args.seed)
+    start_time = time.perf_counter()
     prob = Prob(args)
-    efn = prob.fuse_efn if args.fuse else prob.conv_efn
+    runtime = time.perf_counter() - start_time
+    print(f"[compile] Compile time was {runtime:0.2f}")
+    efn = prob.efn
 
     logger = Logger(args)
 
@@ -103,7 +108,7 @@ def execute(Prob, args):
         print("Batch mode! Will not print out hints...")
 
         key, *run_keys = jax.random.split(key, num=args.trials)
-        p = Pool(6, initializer=mute)
+        p = Pool(args.threads, initializer=mute)
 
         ctss = []
         succs = 0
@@ -128,12 +133,12 @@ def execute(Prob, args):
             ctss.append(cts.item())
             succs += succ
             # logger.log(run_key, res)
-        print_cts_stats(ctss)
         print(f"Success: {succs/args.trials:0.3f}")
+        print_cts_stats(ctss)
 
 
 def parse(inparser, subparser):
-    probs = [Cut, Col, Tsp, Iso]
+    probs = [Cut, Col, Tsp, Iso, Knp]
     prob_parsers = {prob.gen_parser(subparser): prob for prob in probs}
     args = inparser.parse_args()
     if args.problem not in prob_parsers:
@@ -145,14 +150,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FUSE Simulator")
     parser.add_argument("-t", "--trials", type=int, help="Number of trials")
     parser.add_argument(
+        "-x", "--threads", type=int, default=6, help="Number of threads to use"
+    )
+    parser.add_argument(
         "-i", "--iters", type=int, help="Number of iterations", default=1000000
     )
     parser.add_argument("-s", "--seed", type=int, help="Random Seed", default=0)
     parser.add_argument(
         "-f", "--fuse", action="store_true", help="Use FUSE Energy Function"
     )
-    parser.add_argument("-bi", "--beta_init", default=0.0, help="Initial Beta value")
-    parser.add_argument("-be", "--beta_end", default=1.0, help="Ending Beta value")
+    parser.add_argument(
+        "-bi", "--beta_init", type=float, default=0.0, help="Initial Beta value"
+    )
+    parser.add_argument(
+        "-be", "--beta_end", type=float, default=1.0, help="Ending Beta value"
+    )
     parser.add_argument(
         "-bl", "--beta_log", action="store_true", help="Use Logarithmic Beta scaling"
     )
