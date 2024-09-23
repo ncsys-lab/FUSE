@@ -6,6 +6,8 @@ import networkx as nx
 import numpy as np
 import sympy
 
+from circuit import SelectNet
+
 from .prob import ConvEfn, FuseEfn, Prob
 
 
@@ -22,7 +24,7 @@ class ColConvEfn(ConvEfn):
 
         idx1, idx2 = np.triu_indices_from(spins, k=1)
         cost_expr = sympy.Add(
-            *(weights[:, np.newaxis] * spins[idx1] * spins[idx2]).flatten()
+            *(weights[:, np.newaxis] * chi * spins[idx1] * spins[idx2]).flatten()
         )
 
         invalid_expr = (self.n) * ((1 - (spins * chi).sum(axis=-1)) ** 2).sum()
@@ -36,7 +38,7 @@ class ColConvEfn(ConvEfn):
     def compile(self, inst):
         weights, chi = inst
         weight_dict = {weight: inst_w for weight, inst_w in zip(self.weights, weights)}
-        chi_dict = {self.chi[j]: 1 if (j < chi) else 0 for j in range(self.n)}
+        chi_dict = {self.chi[j]: 1 if j < chi else 0 for j in range(self.n)}
         sub_dict = {**weight_dict, **chi_dict}
         return super().compile(sub_dict)
 
@@ -45,25 +47,47 @@ class ColFuseEfn(FuseEfn):
     def __init__(self, n):
         super().__init__()
         self.n = n
-        self.spins = 0
+
+    def compile(self, inst):
+        weights, chi = inst
+        self.spins, selectfn = SelectNet(self.n, chi)
+
+        @jax.jit
+        def circuitfn(spins):
+            col_mat = selectfn(spins.reshape(self.n, chi - 1))
+            # print(col_mat)
+            # jax.debug.print("spins: {spins}", spins=spins.reshape(self.n, self.n - 1))
+            # jax.debug.print("Col_Mat: {col_mat}", col_mat=col_mat)
+            idx1, idx2 = jnp.triu_indices(self.n, k=1)
+            return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
+
+        return super().compile(weights, circuitfn)
+        # return super().compile(weights, lambda x: circuit(x, self.n, chi, m, vals))
+
+
+class ColLogFuseEfn(FuseEfn):
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
 
     def compile(self, inst):
         weights, chi = inst
 
         m = floor(log2(chi))
         vals = [1 << i for i in range(m)]
-        vals.append(chi - (1 << m))
-        vals = np.array(vals)
+        if chi != (1 << m):
+            vals.append(chi - (1 << m))
 
-        self.spins = self.n * (m + 1)
+        vals = np.array(vals)
+        self.spins = self.n * (vals.shape[0])
 
         @jax.jit
         def circuitfn(spins):
-            spins = spins.reshape((self.n, m + 1))
+            spins = spins.reshape((self.n, vals.shape[0]))
             cols = spins @ vals
 
             col_mat = jnp.zeros((self.n, chi))
-            col_mat = col_mat.at[cols].set(1)
+            col_mat = col_mat.at[jnp.arange(self.n), cols].set(1)
             idx1, idx2 = jnp.triu_indices(self.n, k=1)
             return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
 

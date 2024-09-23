@@ -17,7 +17,7 @@ class Logger:
         )
 
     def log(self, run_key, res):
-        prob_sol, succ, cts, trace = res
+        prob_sol, succ, cts, sol_qual, trace = res
         states, energies = trace
 
         states = states[self.log_idx]
@@ -28,8 +28,10 @@ class Logger:
         jnp.savez(
             log_file,
             prob_sol=prob_sol,
-            succ=succ,
+            succ=succ[0],
+            succ_10=succ[1],
             cts=cts,
+            sol_qual=sol_qual,
             states=states,
             energies=energies,
         )

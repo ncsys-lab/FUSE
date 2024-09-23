@@ -23,10 +23,8 @@ class TspConvEfn(ConvEfn):
         M_p = np.roll(M, -1, axis=1).T
 
         X = M @ M_p
-        V = (
-            X[np.triu_indices_from(X, k=1)].flatten()
-            + X[np.tril_indices_from(X, k=-1)].flatten()
-        )
+        V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
+
         cost_expr = np.dot(V, weights)
         location_once = ((1 - spins.sum(axis=0)) ** 2).sum()
         time_once = ((1 - spins.sum(axis=1)) ** 2).sum()
@@ -45,19 +43,16 @@ class TspConvEfn(ConvEfn):
 class TspFuseEfn(FuseEfn):
     def __init__(self, n):
         self.n = n
-        self.spins, permutefn = PermuteNet(self.n)
+        self.spins, self.permutefn = PermuteNet(self.n)
 
         @jax.jit
         def circuitfn(state):
-            spins = permutefn(state)
+            spins = self.permutefn(state)
             M = spins.T
             M_p = jnp.roll(M, -1, axis=1).T
 
             X = M @ M_p
-            V = (
-                X[jnp.triu_indices_from(X, k=1)].flatten()
-                + X[jnp.tril_indices_from(X, k=-1)].flatten()
-            )
+            V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
             return V
 
         self.circuitfn = circuitfn
@@ -86,12 +81,25 @@ class Tsp(Prob):
         ).astype(int)
 
     def sol_inst(self, prob_inst):
+        g = nx.Graph()
+        for i in range(self.n):
+            g.add_node(i)
+
+        idx = 0
+        for i in range(self.n):
+            for j in range(i + 1, self.n):
+                g.add_edge(i, j, weight=prob_inst[idx])
+                idx += 1
+
+        """
         adj_mat = np.zeros(shape=(self.n, self.n))
         adj_mat[np.triu_indices_from(adj_mat, k=1)] = prob_inst
         adj_mat += adj_mat.T
 
         g = nx.from_numpy_array(adj_mat)
-        path = nx.approximation.traveling_salesman_problem(g)
+        """
+
+        path = nx.approximation.christofides(g)
         weight = sum(g[n][nbr]["weight"] for n, nbr in nx.utils.pairwise(path))
         return weight
 

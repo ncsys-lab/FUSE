@@ -35,22 +35,34 @@ class ConvEfn(Efn):
         energy_expr = self.energy_expr.xreplace(sub_dict)
         grad_expr = self.grad_expr.xreplace(sub_dict)
 
-        gradfn = sympy.lambdify([self.spins], grad_expr, modules="jax", cse=True)
-        energyfn = sympy.lambdify([self.spins], energy_expr, modules="jax", cse=True)
+        fgrad_expr = sympy.Matrix(
+            [
+                expr
+                for (expr, s) in zip(grad_expr, self.spins)
+                if s in energy_expr.free_symbols
+            ]
+        )
+
+        energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
+        grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
+
+        assert energy_syms == grad_syms
+
+        gradfn = sympy.lambdify([energy_syms], fgrad_expr, modules="jax", cse=True)
+        energyfn = sympy.lambdify([grad_syms], energy_expr, modules="jax", cse=True)
 
         g = nx.Graph()
-        for spin in self.spins:
+        for spin in energy_syms:
             g.add_node(spin)
 
-        for spin, expr in zip(self.spins, grad_expr):
+        for spin, expr in zip(energy_syms, fgrad_expr):
             for dep in expr.free_symbols:
                 g.add_edge(spin, dep)
 
         color_dict = nx.greedy_color(g)
-        colors = np.fromiter([color_dict[spin] for spin in self.spins], dtype=int)
+        colors = np.fromiter([color_dict[spin] for spin in energy_syms], dtype=int)
         ncolors = max(colors) + 1
-
-        masks = np.zeros((ncolors, len(self.spins)), dtype=np.bool_)
+        masks = np.zeros((ncolors, len(energy_syms)), dtype=np.bool_)
         masks[colors, np.arange(colors.size)] = 1
         masks = jnp.asarray(masks)
 

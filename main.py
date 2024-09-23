@@ -14,7 +14,7 @@ from problems.cut import Cut
 from problems.iso import Iso
 from problems.knp import Knp
 from problems.tsp import Tsp
-from util import print_cts_stats
+from util import print_run_stats
 
 ctx._force_start_method("spawn")
 jax.config.update("jax_platform_name", "cpu")
@@ -52,7 +52,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
         pos = (jax.nn.sigmoid(-beta * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
         beta = betafn(beta)
-        return (key, beta, new_state), (new_state, energy)
+        return (key, beta, new_state), (state, energy)
 
     key, subkey = jax.random.split(key)
     state = jax.random.bernoulli(subkey, shape=p).astype(int)
@@ -64,15 +64,24 @@ def run(key, iters, prob, efn, beta_i, betafn):
     _, trace = jax.lax.scan(inner_loop, init_pargs, x, iters)
 
     bits, energies = trace
-    # print(bits[jnp.argmin(energies)])
+    # print(bits[jnp.argmin(energies)].reshape(6, 6))
     # print(jnp.min(energies))
+
+    min_energy = jnp.min(energies)
+    sol_qual = (
+        (prob_sol - min_energy) / abs(prob_sol) if prob_sol != 0 else jnp.array(-1)
+    )
+
     gated = energies <= prob_sol
     succ = jnp.sum(gated) > 0
+    succ_10 = jnp.sum(gated[: iters // 10]) > 0
+
     cts = jnp.argmax(gated) if succ else jnp.array(-1)
     return (
         prob_sol,
-        succ,
+        (succ, succ_10),
         cts,
+        sol_qual,
         trace,
     )
 
@@ -92,7 +101,7 @@ def execute(Prob, args):
         if args.beta_log:
             raise NotImplementedError
         else:
-            return beta + (args.beta_end - args.beta_init) / args.iters
+            return beta + (10**args.beta_end - args.beta_init) / args.iters
 
     if args.trials is None:
         print("[run] Running!")
@@ -100,6 +109,12 @@ def execute(Prob, args):
         key, run_key = jax.random.split(key)
         res = run(run_key, args.iters, prob, efn, args.beta_init, betafn)
         print(res)
+        _, succ, cts, sol_qual, trace = res
+
+        bits, energy = trace
+        perm_out = efn.permutefn(bits[jnp.argmin(energy)])
+        print(perm_out.astype(int))
+
         logger.log(run_key, res)
         runtime = time.perf_counter() - start_time
         print(f"[run] Runtime was {runtime:0.2f}")
@@ -107,11 +122,13 @@ def execute(Prob, args):
     else:
         print("Batch mode! Will not print out hints...")
 
-        key, *run_keys = jax.random.split(key, num=args.trials)
+        run_keys = jax.random.split(key, num=args.trials)
         p = Pool(args.threads, initializer=mute)
 
         ctss = []
+        sol_quals = []
         succs = 0
+        succs_10 = 0
         for res, run_key in zip(
             tqdm(
                 p.imap(
@@ -129,12 +146,16 @@ def execute(Prob, args):
             ),
             run_keys,
         ):
-            _, succ, cts, _ = res
+            _, succ, cts, sol_qual, _ = res
             ctss.append(cts.item())
-            succs += succ
-            # logger.log(run_key, res)
-        print(f"Success: {succs/args.trials:0.3f}")
-        print_cts_stats(ctss)
+            sol_quals.append(sol_qual.item())
+            succs += succ[0]
+            succs_10 += succ[1]
+            logger.log(run_key, res)
+        esp = succs / args.trials
+        esp_10 = succs_10 / args.trials
+        # print(f"Success: {esp:0.3f}")
+        print_run_stats(esp, esp_10, ctss, sol_quals)
 
 
 def parse(inparser, subparser):
