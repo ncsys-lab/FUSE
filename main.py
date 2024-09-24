@@ -13,6 +13,7 @@ from problems.col import Col
 from problems.cut import Cut
 from problems.iso import Iso
 from problems.knp import Knp
+from problems.stp import Stp
 from problems.tsp import Tsp
 from util import print_run_stats
 
@@ -30,8 +31,15 @@ def run(key, iters, prob, efn, beta_i, betafn):
     key, prob_key = jax.random.split(key)
     prob_inst = prob.gen_inst(prob_key)
     prob_sol = prob.sol_inst(prob_inst)
-    energyfn, gradfn, masks = efn.compile(prob_inst)
 
+    print("[lower] Lowering!")
+    start_time = time.perf_counter()
+    engradfn, masks = efn.compile(prob_inst)
+    runtime = time.perf_counter() - start_time
+    print(f"[lower] Lowering was {runtime:0.2f}")
+
+    print("[run] Running!")
+    start_time = time.perf_counter()
     n_masks = len(masks)
     p = masks[0].shape
 
@@ -39,8 +47,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
         (key, beta, state) = pargs
         key, subkey = jax.random.split(key)
         mask = masks[i % n_masks]
-        grad = gradfn(state, mask)
-        energy = energyfn(state)
+        energy, grad = engradfn(state, mask)
         if DEBUG:
             jax.debug.print(
                 "{i}:\tEnergy: {energy}\t, State: {state}",
@@ -77,6 +84,9 @@ def run(key, iters, prob, efn, beta_i, betafn):
     succ_10 = jnp.sum(gated[: iters // 10]) > 0
 
     cts = jnp.argmax(gated) if succ else jnp.array(-1)
+
+    runtime = time.perf_counter() - start_time
+    print(f"[run] Runtime was {runtime:0.2f}")
     return (
         prob_sol,
         (succ, succ_10),
@@ -104,8 +114,6 @@ def execute(Prob, args):
             return beta + (10**args.beta_end - args.beta_init) / args.iters
 
     if args.trials is None:
-        print("[run] Running!")
-        start_time = time.perf_counter()
         key, run_key = jax.random.split(key)
         res = run(run_key, args.iters, prob, efn, args.beta_init, betafn)
         print(res)
@@ -116,8 +124,7 @@ def execute(Prob, args):
         # print(perm_out.astype(int))
 
         logger.log(run_key, res)
-        runtime = time.perf_counter() - start_time
-        print(f"[run] Runtime was {runtime:0.2f}")
+        start_time = time.perf_counter()
 
     else:
         print("Batch mode! Will not print out hints...")
@@ -159,7 +166,7 @@ def execute(Prob, args):
 
 
 def parse(inparser, subparser):
-    probs = [Cut, Col, Tsp, Iso, Knp]
+    probs = [Cut, Col, Tsp, Iso, Knp, Stp]
     prob_parsers = {prob.gen_parser(subparser): prob for prob in probs}
     args = inparser.parse_args()
     if args.problem not in prob_parsers:
