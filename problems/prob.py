@@ -1,3 +1,4 @@
+import time
 from abc import abstractmethod
 
 import jax
@@ -5,6 +6,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import symengine as se
 import sympy
 
 
@@ -26,16 +28,23 @@ class ConvEfn(Efn):
         print("[generate] Generating energy function...")
         (self.energy_expr, self.spins) = self._gen_exprs()
 
+        square_dict = {spin**2: spin for spin in self.spins}
+        self.energy_expr = self.energy_expr.expand().xreplace(square_dict)
+
         print("[generate] Calculating symbolic gradients...")
-        self.grad_expr = sympy.Matrix(
-            [sympy.diff(self.energy_expr, spin) for spin in self.spins]
+        self.grad_expr = se.Matrix(
+            [se.diff(self.energy_expr, spin) for spin in self.spins]
         )
 
     def compile(self, sub_dict):
-        energy_expr = self.energy_expr.xreplace(sub_dict)
+        energy_expr = self.energy_expr.xreplace(sub_dict).expand()
+
         grad_expr = self.grad_expr.xreplace(sub_dict)
 
-        fgrad_expr = sympy.Matrix(
+        energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
+        grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
+
+        fgrad_expr = se.Matrix(
             [
                 expr
                 for (expr, s) in zip(grad_expr, self.spins)
@@ -43,13 +52,20 @@ class ConvEfn(Efn):
             ]
         )
 
-        energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
-        grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
+        zero_dict = {spin: 0 for spin in energy_syms}
+        bias = jnp.array(float(energy_expr.subs(zero_dict)))
 
-        assert energy_syms == grad_syms
+        segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
 
-        gradfn = sympy.lambdify([energy_syms], fgrad_expr, modules="jax", cse=True)
-        energyfn = sympy.lambdify([grad_syms], energy_expr, modules="jax", cse=True)
+        n_spins = len(energy_syms)
+        h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
+        J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)])
+
+        @jax.jit
+        def engradfn(x, _):
+            grad = jnp.dot(J, x) + h
+            energy = jnp.dot(grad, x) + bias
+            return grad, energy
 
         g = nx.Graph()
         for spin in energy_syms:
@@ -66,7 +82,7 @@ class ConvEfn(Efn):
         masks[colors, np.arange(colors.size)] = 1
         masks = jnp.asarray(masks)
 
-        return energyfn, (lambda x, _: gradfn(x)), masks
+        return engradfn, masks
 
     @abstractmethod
     def _gen_exprs(self):
@@ -79,14 +95,17 @@ class FuseEfn(Efn):
         self.spins = 0
 
     def compile(self, weights, circuitfn, masks=None):
-        def gradfn(state, mask):
+        @jax.jit
+        def engradfn(state, mask):
             z_state = jnp.where(mask, 0, state)
             o_state = jnp.where(mask, 1, state)
-            return jnp.dot(weights, circuitfn(o_state) - circuitfn(z_state))
 
-        def energyfn(state):
-            return jnp.dot(weights, circuitfn(state))
+            z_energy = jnp.dot(weights, circuitfn(z_state))
+            o_energy = jnp.dot(weights, circuitfn(o_state))
+
+            energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
+            return energy, o_energy - z_energy
 
         if masks is None:
             masks = jnp.asarray(np.eye(self.spins, dtype=np.bool_))
-        return energyfn, gradfn, masks
+        return engradfn, masks

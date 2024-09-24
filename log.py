@@ -17,6 +17,7 @@ class Logger:
         )
 
     def log(self, run_key, res):
+        return
         prob_sol, succ, cts, sol_qual, trace = res
         states, energies = trace
 

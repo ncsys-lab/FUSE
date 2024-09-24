@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+import symengine as se
 import sympy
 
 from circuit import PermuteNet
@@ -16,8 +17,8 @@ class TspConvEfn(ConvEfn):
         super().__init__()
 
     def _gen_exprs(self):
-        spins = np.array(sympy.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
-        weights = np.array(sympy.symbols(f"w:{self.n*(self.n-1)//2}"))
+        spins = np.array(se.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
+        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
 
         M = spins.T
         M_p = np.roll(M, -1, axis=1).T
@@ -26,9 +27,9 @@ class TspConvEfn(ConvEfn):
         V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
 
         cost_expr = np.dot(V, weights)
-        location_once = ((1 - spins.sum(axis=0)) ** 2).sum()
-        time_once = ((1 - spins.sum(axis=1)) ** 2).sum()
-        invalid_expr = (self.n * self.maxval) * (sympy.Add(location_once, time_once))
+        location_once = ((se.sympify(1) - spins.sum(axis=0)) ** 2).sum()
+        time_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
+        invalid_expr = (self.n * self.maxval) * (se.Add(location_once, time_once))
 
         energy_expr = invalid_expr + cost_expr
 
