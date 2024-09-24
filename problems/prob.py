@@ -26,6 +26,9 @@ class ConvEfn(Efn):
         print("[generate] Generating energy function...")
         (self.energy_expr, self.spins) = self._gen_exprs()
 
+        square_dict = {spin**2: spin for spin in self.spins}
+        self.energy_expr = self.energy_expr.expand().xreplace(square_dict)
+
         print("[generate] Calculating symbolic gradients...")
         self.grad_expr = sympy.Matrix(
             [sympy.diff(self.energy_expr, spin) for spin in self.spins]

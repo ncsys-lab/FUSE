@@ -112,8 +112,8 @@ def execute(Prob, args):
         _, succ, cts, sol_qual, trace = res
 
         bits, energy = trace
-        perm_out = efn.permutefn(bits[jnp.argmin(energy)])
-        print(perm_out.astype(int))
+        # perm_out = efn.permutefn(bits[jnp.argmin(energy)])
+        # print(perm_out.astype(int))
 
         logger.log(run_key, res)
         runtime = time.perf_counter() - start_time
