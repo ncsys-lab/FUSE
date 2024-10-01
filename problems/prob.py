@@ -32,14 +32,12 @@ class ConvEfn(Efn):
         self.energy_expr = self.energy_expr.expand().xreplace(square_dict)
 
         print("[generate] Calculating symbolic gradients...")
-        self.grad_expr = se.Matrix(
-            [se.diff(self.energy_expr, spin) for spin in self.spins]
-        )
+        self.grad_expr = [se.diff(self.energy_expr, spin) for spin in self.spins]
 
     def compile(self, sub_dict):
         energy_expr = self.energy_expr.xreplace(sub_dict).expand()
-
-        grad_expr = self.grad_expr.xreplace(sub_dict)
+        print(energy_expr)
+        grad_expr = se.Matrix(self.grad_expr).xreplace(sub_dict)
 
         energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
         grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
@@ -51,22 +49,27 @@ class ConvEfn(Efn):
                 if s in energy_expr.free_symbols
             ]
         )
-
+        exit(0)
+        """
         zero_dict = {spin: 0 for spin in energy_syms}
         bias = jnp.array(float(energy_expr.subs(zero_dict)))
+        print(bias)
 
         segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
 
         n_spins = len(energy_syms)
         h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
+        print(h)
         J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)])
+        print(J)
 
         @jax.jit
         def engradfn(x, _):
+            print(jnp.dot(J, x))
             grad = jnp.dot(J, x) + h
             energy = jnp.dot(grad, x) + bias
-            return grad, energy
-
+            return (energy, grad)
+        """
         g = nx.Graph()
         for spin in energy_syms:
             g.add_node(spin)

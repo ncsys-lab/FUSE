@@ -1,4 +1,6 @@
 import argparse
+import os
+import sys
 import time
 from functools import partial
 
@@ -23,6 +25,7 @@ DEBUG = False
 
 
 def mute():
+    sys.stdout = open(os.devnull, "w")
     pass
 
 
@@ -75,6 +78,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
     # print(jnp.min(energies))
 
     min_energy = jnp.min(energies)
+    sol_cyc = jnp.argmin(energies)
     sol_qual = (
         (prob_sol - min_energy) / abs(prob_sol) if prob_sol != 0 else jnp.array(-1)
     )
@@ -91,7 +95,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
         prob_sol,
         (succ, succ_10),
         cts,
-        sol_qual,
+        (sol_qual, sol_cyc),
         trace,
     )
 
@@ -134,6 +138,7 @@ def execute(Prob, args):
 
         ctss = []
         sol_quals = []
+        sol_cycs = []
         succs = 0
         succs_10 = 0
         for res, run_key in zip(
@@ -155,14 +160,15 @@ def execute(Prob, args):
         ):
             _, succ, cts, sol_qual, _ = res
             ctss.append(cts.item())
-            sol_quals.append(sol_qual.item())
+            sol_quals.append(sol_qual[0].item())
+            sol_cycs.append(sol_qual[1].item())
             succs += succ[0]
             succs_10 += succ[1]
             logger.log(run_key, res)
         esp = succs / args.trials
         esp_10 = succs_10 / args.trials
         # print(f"Success: {esp:0.3f}")
-        print_run_stats(esp, esp_10, ctss, sol_quals)
+        print_run_stats(esp, esp_10, ctss, sol_quals, sol_cycs)
 
 
 def parse(inparser, subparser):

@@ -21,7 +21,9 @@ class IsoConvEfn(ConvEfn):
         g2_mat = np.array(sympy.symbols(f"b:{combos}")).reshape((self.n, self.n))
 
         g2_p = spins @ g1_mat @ spins.T
-        cost_expr = (g2_p * (1 - g2_mat) + (1 - g2_p) * (g2_mat)).sum()
+        print(g2_mat)
+        print(g2_p)
+        cost_expr = ((g2_mat) * (1 - g2_p) + g2_p * (1 - g2_mat)).sum()
 
         g1_once = ((1 - spins.sum(axis=0)) ** 2).sum()
         g2_once = ((1 - spins.sum(axis=1)) ** 2).sum()
@@ -38,6 +40,7 @@ class IsoConvEfn(ConvEfn):
         g1_dict = {edge_v: edge for edge_v, edge in zip(self.g1, g1.flatten())}
         g2_dict = {edge_v: edge for edge_v, edge in zip(self.g2, g2.flatten())}
         sub_dict = {**g1_dict, **g2_dict}
+
         return super().compile(sub_dict)
 
 

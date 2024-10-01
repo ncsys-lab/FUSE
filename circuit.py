@@ -59,6 +59,7 @@ def SelectNet(n, k):
         if len != len_round:
             make_select(index + len_round, len - len_round)
             swaps.append((index, index + len_round))
+        print(swaps)
 
     make_select(0, k)
 

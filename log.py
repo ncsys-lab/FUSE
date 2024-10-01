@@ -32,7 +32,8 @@ class Logger:
             succ=succ[0],
             succ_10=succ[1],
             cts=cts,
-            sol_qual=sol_qual,
+            sol_qual=sol_qual[0],
+            sol_cyc=sol_qual[1],
             states=states,
             energies=energies,
         )

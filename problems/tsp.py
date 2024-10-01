@@ -100,7 +100,8 @@ class Tsp(Prob):
         g = nx.from_numpy_array(adj_mat)
         """
 
-        path = nx.approximation.christofides(g)
+        # path = nx.approximation.christofides(g)
+        path = nx.approximation.simulated_annealing_tsp(g, "greedy")
         weight = sum(g[n][nbr]["weight"] for n, nbr in nx.utils.pairwise(path))
         return weight
 
