@@ -6,7 +6,9 @@ def print_run_stats(esp, esp_10, cts, qual, cyc):
     qual = np.array(qual)
     cyc = np.array(cyc)
     filter_cts = cts[np.where(cts != -1)]
-    cts_q1, cts_med, cts_q3 = np.quantile(filter_cts, [0.25, 0.5, 0.75])
+    cts[np.where(cts == -1)] = 1000000
+
+    cts_q1, cts_med, cts_q3 = np.quantile(cts, [0.25, 0.5, 0.75])
     qual_q1, qual_med, qual_q3 = np.quantile(qual, [0.25, 0.5, 0.75])
     cyc_q1, cyc_med, cyc_q3 = np.quantile(cyc, [0.25, 0.5, 0.75])
     print(

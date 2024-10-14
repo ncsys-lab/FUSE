@@ -9,6 +9,8 @@ import numpy as np
 import symengine as se
 import sympy
 
+SMART_LOWER = True
+
 
 class Prob:
     @abstractmethod
@@ -42,47 +44,72 @@ class ConvEfn(Efn):
         energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
         grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
 
-        fgrad_expr = se.Matrix(
-            [
-                expr
-                for (expr, s) in zip(grad_expr, self.spins)
-                if s in energy_expr.free_symbols
-            ]
-        )
-        exit(0)
-        """
-        zero_dict = {spin: 0 for spin in energy_syms}
-        bias = jnp.array(float(energy_expr.subs(zero_dict)))
-        print(bias)
-
-        segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
-
         n_spins = len(energy_syms)
-        h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
-        print(h)
-        J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)])
-        print(J)
 
-        @jax.jit
-        def engradfn(x, _):
-            print(jnp.dot(J, x))
-            grad = jnp.dot(J, x) + h
-            energy = jnp.dot(grad, x) + bias
-            return (energy, grad)
-        """
-        g = nx.Graph()
-        for spin in energy_syms:
-            g.add_node(spin)
+        if SMART_LOWER:
+            zero_dict = {spin: 0 for spin in energy_syms}
+            bias = jnp.array(float(energy_expr.subs(zero_dict)))
 
-        for spin, expr in zip(energy_syms, fgrad_expr):
-            for dep in expr.free_symbols:
-                g.add_edge(spin, dep)
+            fgrad_expr = se.Matrix(
+                [
+                    expr
+                    for (expr, s) in zip(grad_expr, self.spins)
+                    if s in energy_expr.free_symbols
+                ]
+            )
+            segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
 
-        color_dict = nx.greedy_color(g)
-        colors = np.fromiter([color_dict[spin] for spin in energy_syms], dtype=int)
+            h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
+            J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)]) / 2
+
+            @jax.jit
+            def engradfn(x, _):
+                grad = jnp.dot(J, x) + h
+                energy = jnp.dot(grad, x) + bias
+                return (energy, grad)
+
+            color_dict = nx.greedy_color(nx.from_numpy_array(J))
+            colors = np.fromiter(
+                [color_dict[spin] for spin in range(n_spins)], dtype=int
+            )
+
+        else:
+            fgrad_expr = sympy.Matrix(
+                [
+                    expr
+                    for (expr, s) in zip(grad_expr, self.spins)
+                    if s in energy_expr.free_symbols
+                ]
+            )
+            gradfn = sympy.lambdify(energy_syms, fgrad_expr, modules="jax")
+            energyfn = sympy.lambdify(grad_syms, energy_expr, modules="jax")
+
+            @jax.jit
+            def engradfn(x, _):
+                energy = energyfn(x)
+                grad = gradfn(x)
+                return (energy, grad)
+
+            g = nx.Graph()
+            for spin in energy_syms:
+                g.add_node(spin)
+
+            for spin, expr in zip(energy_syms, fgrad_expr):
+                for dep in expr.free_symbols:
+                    g.add_edge(spin, dep)
+
+            color_dict = nx.greedy_color(g)
+            colors = np.fromiter([color_dict[spin] for spin in energy_syms], dtype=int)
+            print(color_dict)
+
         ncolors = max(colors) + 1
+        print(f"p-bits: {len(energy_syms)}")
+        print(f"colors: {ncolors}")
+
         masks = np.zeros((ncolors, len(energy_syms)), dtype=np.bool_)
         masks[colors, np.arange(colors.size)] = 1
+
+        # masks = np.eye(len(energy_syms))
         masks = jnp.asarray(masks)
 
         return engradfn, masks
@@ -97,18 +124,31 @@ class FuseEfn(Efn):
         print("[compile] Fuse Function! Nothing to generate...")
         self.spins = 0
 
-    def compile(self, weights, circuitfn, masks=None):
-        @jax.jit
-        def engradfn(state, mask):
-            z_state = jnp.where(mask, 0, state)
-            o_state = jnp.where(mask, 1, state)
-
-            z_energy = jnp.dot(weights, circuitfn(z_state))
-            o_energy = jnp.dot(weights, circuitfn(o_state))
-
-            energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
-            return energy, o_energy - z_energy
-
+    def compile(self, weights, circuitfn, masks=None, vcircuitfn=None):
         if masks is None:
+
+            @jax.jit
+            def engradfn(state, mask):
+                z_state = jnp.where(mask, 0, state)
+                o_state = jnp.where(mask, 1, state)
+
+                z_energy = jnp.dot(weights, circuitfn(z_state))
+                o_energy = jnp.dot(weights, circuitfn(o_state))
+
+                energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
+                return energy, o_energy - z_energy
+
             masks = jnp.asarray(np.eye(self.spins, dtype=np.bool_))
+
+        else:
+
+            @jax.jit
+            def engradfn(state, mask):
+                print(state)
+                energy = jnp.dot(weights, circuitfn(state))
+                flip_state = jnp.logical_xor(state, jnp.eye(self.spins))
+                flip_energy = jnp.dot(vcircuitfn(flip_state), weights)
+                grad = (2 * state - 1) * (energy - flip_energy)
+                return energy, grad
+
         return engradfn, masks

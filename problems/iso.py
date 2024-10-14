@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+import symengine as se
 import sympy
 
 from circuit import PermuteNet
@@ -16,18 +17,18 @@ class IsoConvEfn(ConvEfn):
 
     def _gen_exprs(self):
         combos = self.n * self.n
-        spins = np.array(sympy.symbols(f"s:{combos}")).reshape((self.n, self.n))
-        g1_mat = np.array(sympy.symbols(f"a:{combos}")).reshape((self.n, self.n))
-        g2_mat = np.array(sympy.symbols(f"b:{combos}")).reshape((self.n, self.n))
+        spins = np.array(se.symbols(f"s:{combos}")).reshape((self.n, self.n))
+        g1_mat = np.array(se.symbols(f"a:{combos}")).reshape((self.n, self.n))
+        g2_mat = np.array(se.symbols(f"b:{combos}")).reshape((self.n, self.n))
 
         g2_p = spins @ g1_mat @ spins.T
-        print(g2_mat)
-        print(g2_p)
-        cost_expr = ((g2_mat) * (1 - g2_p) + g2_p * (1 - g2_mat)).sum()
+        cost_expr = (
+            (g2_mat) * (se.sympify(1) - g2_p) + g2_p * (se.sympify(1) - g2_mat)
+        ).sum()
 
-        g1_once = ((1 - spins.sum(axis=0)) ** 2).sum()
-        g2_once = ((1 - spins.sum(axis=1)) ** 2).sum()
-        invalid_expr = (self.n) * (sympy.Add(g1_once, g2_once))
+        g1_once = ((se.sympify(1) - spins.sum(axis=0)) ** 2).sum()
+        g2_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
+        invalid_expr = (self.n) * (se.Add(g1_once, g2_once))
 
         energy_expr = invalid_expr + cost_expr
 
@@ -37,8 +38,8 @@ class IsoConvEfn(ConvEfn):
 
     def compile(self, inst):
         g1, g2 = inst
-        g1_dict = {edge_v: edge for edge_v, edge in zip(self.g1, g1.flatten())}
-        g2_dict = {edge_v: edge for edge_v, edge in zip(self.g2, g2.flatten())}
+        g1_dict = {edge_v: edge for edge_v, edge in zip(self.g1, g1.flatten().tolist())}
+        g2_dict = {edge_v: edge for edge_v, edge in zip(self.g2, g2.flatten().tolist())}
         sub_dict = {**g1_dict, **g2_dict}
 
         return super().compile(sub_dict)
@@ -95,5 +96,5 @@ class Iso(Prob):
     def gen_parser(subparser):
         parser = subparser.add_parser("iso", help="Graph Isomorphism Problem")
         parser.add_argument("-n", "--size", type=int, default=8)
-        parser.add_argument("-nu", "--connectivity", type=float, default=0.2)
+        parser.add_argument("-nu", "--connectivity", type=float, default=0.5)
         return "iso"

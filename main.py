@@ -21,6 +21,7 @@ from util import print_run_stats
 
 ctx._force_start_method("spawn")
 jax.config.update("jax_platform_name", "cpu")
+jax.config.update("jax_enable_x64", True)
 DEBUG = False
 
 
@@ -58,7 +59,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
                 energy=energy,
                 state=jnp.astype(state, int),
             )
-        rand = jax.random.uniform(subkey)
+        rand = jax.random.uniform(subkey, shape=p)
         pos = (jax.nn.sigmoid(-beta * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
         beta = betafn(beta)
@@ -74,8 +75,9 @@ def run(key, iters, prob, efn, beta_i, betafn):
     _, trace = jax.lax.scan(inner_loop, init_pargs, x, iters)
 
     bits, energies = trace
-    # print(bits[jnp.argmin(energies)].reshape(6, 6))
+    # print(bits[jnp.argmin(energies)])
     # print(jnp.min(energies))
+    print(jnp.unique(bits, axis=0).shape)
 
     min_energy = jnp.min(energies)
     sol_cyc = jnp.argmin(energies)
@@ -85,6 +87,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
 
     gated = energies <= prob_sol
     succ = jnp.sum(gated) > 0
+
     succ_10 = jnp.sum(gated[: iters // 10]) > 0
 
     cts = jnp.argmax(gated) if succ else jnp.array(-1)
@@ -164,7 +167,7 @@ def execute(Prob, args):
             sol_cycs.append(sol_qual[1].item())
             succs += succ[0]
             succs_10 += succ[1]
-            logger.log(run_key, res)
+            # logger.log(run_key, res)
         esp = succs / args.trials
         esp_10 = succs_10 / args.trials
         # print(f"Success: {esp:0.3f}")
@@ -205,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-lr",
         "--log_rate",
-        default=0.01,
+        default=0.001,
         help="Proportion of logs to keep",
     )
     parser.add_argument(
