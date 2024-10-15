@@ -10,6 +10,8 @@ from circuit import SelectNet
 
 from .prob import ConvEfn, FuseEfn, Prob
 
+FUSE_COLOR = False
+
 
 class ColConvEfn(ConvEfn):
     def __init__(self, n):
@@ -66,29 +68,34 @@ class ColFuseEfn(FuseEfn):
             idx1, idx2 = jnp.triu_indices(n, k=1)
             return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
 
-        adjs = np.zeros((n, n, nspins, nspins))
-        idx1, idx2 = np.triu_indices(n, k=1)
-        adjs[idx1, idx2, :, :] = weights[..., np.newaxis, np.newaxis]
+        if FUSE_COLOR:
+            adjs = np.zeros((n, n, nspins, nspins))
+            idx1, idx2 = np.triu_indices(n, k=1)
+            adjs[idx1, idx2, :, :] = weights[..., np.newaxis, np.newaxis]
 
-        adjs = adjs.swapaxes(1, 2).reshape((n * nspins, n * nspins))
-        adjs += adjs.T
-        adjs += np.kron(np.eye(n), 1 - np.eye(nspins, dtype=bool))
+            adjs = adjs.swapaxes(1, 2).reshape((n * nspins, n * nspins))
+            adjs += adjs.T
+            adjs += np.kron(np.eye(n), 1 - np.eye(nspins, dtype=bool))
 
-        color_dict = nx.greedy_color(nx.from_numpy_array(adjs))
-        colors = np.fromiter(
-            [color_dict[spin] for spin in range(n * nspins)], dtype=int
-        )
-        ncolors = max(colors) + 1
+            color_dict = nx.greedy_color(nx.from_numpy_array(adjs))
+            colors = np.fromiter(
+                [color_dict[spin] for spin in range(n * nspins)], dtype=int
+            )
+            ncolors = max(colors) + 1
 
-        print(f"colors: {ncolors}")
+            print(f"colors: {ncolors}")
 
-        masks = np.zeros((ncolors, n * nspins), dtype=np.bool_)
-        masks[colors, np.arange(colors.size)] = 1
+            masks = np.zeros((ncolors, n * nspins), dtype=np.bool_)
+            masks[colors, np.arange(colors.size)] = 1
 
-        masks = jnp.asarray(masks)
+            masks = jnp.asarray(masks)
 
-        vcircuitfn = jax.vmap(circuitfn)
-        return super().compile(weights, circuitfn, vcircuitfn=vcircuitfn, masks=masks)
+            vcircuitfn = jax.vmap(circuitfn)
+            return super().compile(
+                weights, circuitfn, vcircuitfn=vcircuitfn, masks=masks
+            )
+        else:
+            return super().compile(weights, circuitfn)
         # return super().compile(weights, lambda x: circuit(x, self.n, chi, m, vals))
 
 

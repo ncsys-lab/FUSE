@@ -77,7 +77,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
     bits, energies = trace
     # print(bits[jnp.argmin(energies)])
     # print(jnp.min(energies))
-    print(jnp.unique(bits, axis=0).shape)
+    # print(jnp.unique(bits, axis=0).shape)
 
     min_energy = jnp.min(energies)
     sol_cyc = jnp.argmin(energies)
