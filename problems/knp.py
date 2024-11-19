@@ -111,10 +111,8 @@ class Knp(Prob):
 
     def sol_inst(self, prob_inst):
         weights, costs = prob_inst
-        weight, result = knap_solver.knapsack(size=weights, weight=costs).solve(
-            self.cap
-        )
-        return -weight
+        value, result = knap_solver.knapsack(size=weights, weight=costs).solve(self.cap)
+        return -value
 
     @staticmethod
     def gen_parser(subparser):

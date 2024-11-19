@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 import sympy
 
-from .prob import ConvEfn, EncEfn, Prob
+from .prob import ConvEfn, Prob
 
 
 class CutConvEfn(ConvEfn):
@@ -29,14 +29,6 @@ class CutConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class CutEncEfn(ConvEfn):
-    def __init__(self, n):
-        self.n = n
-
-    def energy(self):
-        pass
-
-
 class Cut(Prob):
     def __init__(self, args):
         self.n = args.size
@@ -55,7 +47,6 @@ class Cut(Prob):
     def sol_inst(self, prob_inst):
         adj_mat = np.zeros(shape=(self.n, self.n))
         adj_mat[np.triu_indices_from(adj_mat, k=1)] = prob_inst
-        # adj_mat[np.tril_indices_from(adj_mat, k=-1)] = prob_inst
         g = nx.from_numpy_array(adj_mat)
         weight, _ = nx.approximation.one_exchange(g)
         return -weight
