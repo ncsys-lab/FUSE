@@ -7,7 +7,7 @@ import sympy
 
 from circuit import PermuteNet
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 
 class TspConvEfn(ConvEfn):
@@ -41,7 +41,7 @@ class TspConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class TspFuseEfn(FuseEfn):
+class TspEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
         self.spins, self.permutefn = PermuteNet(self.n)
@@ -67,11 +67,10 @@ class Tsp(Prob):
         self.n = args.size
         self.minval = args.minval
         self.maxval = args.maxval
-        if args.fuse:
-            self.efn = TspFuseEfn(self.n)
+        if args.enc:
+            self.efn = TspEncEfn(self.n)
         else:
             self.efn = TspConvEfn(self.n, self.maxval)
-        # self.fuse_efn = CutFuseEfn(self.n)
 
     def gen_inst(self, key):
         combos = self.n * (self.n - 1) // 2

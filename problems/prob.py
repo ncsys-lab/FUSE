@@ -38,7 +38,6 @@ class ConvEfn(Efn):
 
     def compile(self, sub_dict):
         energy_expr = self.energy_expr.xreplace(sub_dict).expand()
-        print(energy_expr)
         grad_expr = se.Matrix(self.grad_expr).xreplace(sub_dict)
 
         energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
@@ -100,16 +99,14 @@ class ConvEfn(Efn):
 
             color_dict = nx.greedy_color(g)
             colors = np.fromiter([color_dict[spin] for spin in energy_syms], dtype=int)
-            print(color_dict)
 
         ncolors = max(colors) + 1
-        print(f"p-bits: {len(energy_syms)}")
-        print(f"colors: {ncolors}")
+        print(f"[lower] Used p-bits: {len(energy_syms)}")
+        print(f"[lower] Depedent colors: {ncolors}")
 
         masks = np.zeros((ncolors, len(energy_syms)), dtype=np.bool_)
         masks[colors, np.arange(colors.size)] = 1
 
-        # masks = np.eye(len(energy_syms))
         masks = jnp.asarray(masks)
 
         return engradfn, masks
@@ -119,9 +116,9 @@ class ConvEfn(Efn):
         pass
 
 
-class FuseEfn(Efn):
+class EncEfn(Efn):
     def __init__(self):
-        print("[compile] Fuse Function! Nothing to generate...")
+        print("[compile] Encocded Energy Function! Nothing to generate...")
         self.spins = 0
 
     def compile(self, weights, circuitfn, masks=None, vcircuitfn=None):
@@ -132,8 +129,8 @@ class FuseEfn(Efn):
                 z_state = jnp.where(mask, 0, state)
                 o_state = jnp.where(mask, 1, state)
 
-                z_energy = jnp.dot(weights, circuitfn(z_state))
-                o_energy = jnp.dot(weights, circuitfn(o_state))
+                z_energy = jnp.dot(weights, circuitfn(z_state)).astype("float64")
+                o_energy = jnp.dot(weights, circuitfn(o_state)).astype("float64")
 
                 energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
                 return energy, o_energy - z_energy
@@ -144,7 +141,6 @@ class FuseEfn(Efn):
 
             @jax.jit
             def engradfn(state, mask):
-                print(state)
                 energy = jnp.dot(weights, circuitfn(state))
                 flip_state = jnp.logical_xor(state, jnp.eye(self.spins))
                 flip_energy = jnp.dot(vcircuitfn(flip_state), weights)

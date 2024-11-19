@@ -6,7 +6,7 @@ import sympy
 
 from circuit import PermuteNet
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 
 class StpConvEfn(ConvEfn):
@@ -35,7 +35,6 @@ class StpConvEfn(ConvEfn):
         spins = np.hstack(
             (v_depth.flatten(), v_sel, e_sel, e_depth[off_diag].flatten())
         )
-        print(spins.shape)
 
         cost_expr = np.dot(e_sel, weights)
 
@@ -68,7 +67,7 @@ class StpConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class StpFuseEfn(FuseEfn):
+class StpEncEfn(EncEfn):
     def __init__(self, n, t):
         self.n = n
         self.t = t
@@ -115,8 +114,8 @@ class Stp(Prob):
         self.t = args.terminals
         self.minval = args.minval
         self.maxval = args.maxval
-        if args.fuse:
-            self.efn = StpFuseEfn(self.n, self.t)
+        if args.enc:
+            self.efn = StpEncEfn(self.n, self.t)
         else:
             self.efn = StpConvEfn(self.n, self.t, self.maxval)
 
@@ -150,5 +149,5 @@ class Stp(Prob):
         parser.add_argument("-n", "--size", type=int, default=8)
         parser.add_argument("-u", "--terminals", type=int, default=4)
         parser.add_argument("-minval", type=int, default=1)
-        parser.add_argument("-maxval", type=int, default=10)
+        parser.add_argument("-maxval", type=int, default=100)
         return "stp"
