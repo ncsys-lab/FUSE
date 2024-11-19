@@ -47,8 +47,8 @@ def run(key, iters, prob, efn, beta_i, betafn):
     n_masks = len(masks)
     p = masks[0].shape
 
-    def inner_loop(pargs, i):
-        (key, beta, state) = pargs
+    def inner_loop(val):
+        (i, key, beta, state, energy) = val
         key, subkey = jax.random.split(key)
         mask = masks[i % n_masks]
         energy, grad = engradfn(state, mask)
@@ -63,34 +63,42 @@ def run(key, iters, prob, efn, beta_i, betafn):
         pos = (jax.nn.sigmoid(-beta * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
         beta = betafn(beta)
+        return (i + 1, key, beta, new_state, energy)
         return (key, beta, new_state), (state, energy)
 
     key, subkey = jax.random.split(key)
     state = jax.random.bernoulli(subkey, shape=p).astype(int)
 
     key, subkey = jax.random.split(key)
-    init_pargs = (subkey, beta_i, state)
+    init_pargs = (jnp.int64(0), subkey, beta_i, state, jnp.float64(0.0))
 
     x = jnp.arange(iters)
-    _, trace = jax.lax.scan(inner_loop, init_pargs, x, iters)
 
+    def cond_fun(val):
+        (i, key, beta, state, energy) = val
+        return (i == 0) + (energy > prob_sol) * (i < iters)
+
+    (i, _, _, state, energy) = jax.lax.while_loop(cond_fun, inner_loop, init_pargs)
+    print(state)
+
+    """
     bits, energies = trace
     # print(bits[jnp.argmin(energies)])
     # print(jnp.min(energies))
     # print(jnp.unique(bits, axis=0).shape)
+    """
 
-    min_energy = jnp.min(energies)
-    sol_cyc = jnp.argmin(energies)
+    min_energy = energy
+    # sol_cyc = jnp.argmin(energies)
+    sol_cyc = i
     sol_qual = (
         (prob_sol - min_energy) / abs(prob_sol) if prob_sol != 0 else jnp.array(-1)
     )
 
-    gated = energies <= prob_sol
-    succ = jnp.sum(gated) > 0
+    succ = energy <= prob_sol
+    succ_10 = i < iters // 10
 
-    succ_10 = jnp.sum(gated[: iters // 10]) > 0
-
-    cts = jnp.argmax(gated) if succ else jnp.array(-1)
+    cts = i if succ else jnp.array([5000000])
 
     runtime = time.perf_counter() - start_time
     print(f"[run] Runtime was {runtime:0.2f}")
@@ -99,7 +107,7 @@ def run(key, iters, prob, efn, beta_i, betafn):
         (succ, succ_10),
         cts,
         (sol_qual, sol_cyc),
-        trace,
+        None,
     )
 
 
@@ -126,7 +134,7 @@ def execute(Prob, args):
         print(res)
         _, succ, cts, sol_qual, trace = res
 
-        bits, energy = trace
+        # bits, energy = trace
         # perm_out = efn.permutefn(bits[jnp.argmin(energy)])
         # print(perm_out.astype(int))
 

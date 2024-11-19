@@ -132,8 +132,8 @@ class FuseEfn(Efn):
                 z_state = jnp.where(mask, 0, state)
                 o_state = jnp.where(mask, 1, state)
 
-                z_energy = jnp.dot(weights, circuitfn(z_state))
-                o_energy = jnp.dot(weights, circuitfn(o_state))
+                z_energy = jnp.dot(weights, circuitfn(z_state)).astype("float64")
+                o_energy = jnp.dot(weights, circuitfn(o_state)).astype("float64")
 
                 energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
                 return energy, o_energy - z_energy

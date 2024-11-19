@@ -150,5 +150,5 @@ class Stp(Prob):
         parser.add_argument("-n", "--size", type=int, default=8)
         parser.add_argument("-u", "--terminals", type=int, default=4)
         parser.add_argument("-minval", type=int, default=1)
-        parser.add_argument("-maxval", type=int, default=10)
+        parser.add_argument("-maxval", type=int, default=100)
         return "stp"
