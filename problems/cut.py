@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 import sympy
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 
 class CutConvEfn(ConvEfn):
@@ -29,7 +29,7 @@ class CutConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class CutFuseEfn(ConvEfn):
+class CutEncEfn(ConvEfn):
     def __init__(self, n):
         self.n = n
 
@@ -41,11 +41,10 @@ class Cut(Prob):
     def __init__(self, args):
         self.n = args.size
         self.nu = args.connectivity
-        if args.fuse:
+        if args.enc:
             self.efn = None
         else:
             self.efn = CutConvEfn(self.n)
-        # self.fuse_efn = CutFuseEfn(self.n)
 
     def gen_inst(self, key):
         combos = self.n * (self.n - 1) // 2

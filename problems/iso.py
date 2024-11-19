@@ -7,7 +7,7 @@ import sympy
 
 from circuit import PermuteNet
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 
 class IsoConvEfn(ConvEfn):
@@ -45,7 +45,7 @@ class IsoConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class IsoFuseEfn(FuseEfn):
+class IsoEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
         self.spins, self.permutefn = PermuteNet(self.n)
@@ -68,8 +68,8 @@ class Iso(Prob):
     def __init__(self, args):
         self.n = args.size
         self.nu = args.connectivity
-        if args.fuse:
-            self.efn = IsoFuseEfn(self.n)
+        if args.enc:
+            self.efn = IsoEncEfn(self.n)
         else:
             self.efn = IsoConvEfn(self.n)
 
@@ -87,9 +87,6 @@ class Iso(Prob):
 
         perm_mat = jax.random.permutation(keys[1], jnp.eye(self.n, dtype=int))
         g2_mat = perm_mat @ g1_mat @ perm_mat.T
-        print(perm_mat)
-        print(g1_mat)
-        print(g2_mat)
         return g1_mat, g2_mat
 
     @staticmethod

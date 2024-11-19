@@ -8,7 +8,7 @@ import sympy
 
 from circuit import SelectNet
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 FUSE_COLOR = False
 
@@ -30,7 +30,6 @@ class ColConvEfn(ConvEfn):
         )
 
         invalid_expr = (self.n) * ((1 - (spins * chi).sum(axis=-1)) ** 2).sum()
-        print(invalid_expr)
         energy_expr = invalid_expr + cost_expr
 
         self.weights = weights
@@ -46,7 +45,7 @@ class ColConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class ColFuseEfn(FuseEfn):
+class ColEncEfn(EncEfn):
     def __init__(self, n):
         super().__init__()
         self.n = n
@@ -62,9 +61,6 @@ class ColFuseEfn(FuseEfn):
         @jax.jit
         def circuitfn(spins):
             col_mat = self.selectfn(spins.reshape(n, nspins))
-            # print(col_mat)
-            # jax.debug.print("spins: {spins}", spins=spins.reshape(self.n, self.n - 1))
-            # jax.debug.print("Col_Mat: {col_mat}", col_mat=col_mat)
             idx1, idx2 = jnp.triu_indices(n, k=1)
             return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
 
@@ -83,8 +79,6 @@ class ColFuseEfn(FuseEfn):
             )
             ncolors = max(colors) + 1
 
-            print(f"colors: {ncolors}")
-
             masks = np.zeros((ncolors, n * nspins), dtype=np.bool_)
             masks[colors, np.arange(colors.size)] = 1
 
@@ -96,10 +90,9 @@ class ColFuseEfn(FuseEfn):
             )
         else:
             return super().compile(weights, circuitfn)
-        # return super().compile(weights, lambda x: circuit(x, self.n, chi, m, vals))
 
 
-class ColLogFuseEfn(FuseEfn):
+class ColLogEncEfn(EncEfn):
     def __init__(self, n):
         super().__init__()
         self.n = n
@@ -126,15 +119,14 @@ class ColLogFuseEfn(FuseEfn):
             return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
 
         return super().compile(weights, circuitfn)
-        # return super().compile(weights, lambda x: circuit(x, self.n, chi, m, vals))
 
 
 class Col(Prob):
     def __init__(self, args):
         self.n = args.size
         self.nu = args.connectivity
-        if args.fuse:
-            self.efn = ColFuseEfn(self.n)
+        if args.enc:
+            self.efn = ColEncEfn(self.n)
         else:
             self.efn = ColConvEfn(self.n)
 
@@ -143,7 +135,6 @@ class Col(Prob):
         weights = np.asarray(jax.random.bernoulli(key, p=self.nu, shape=combos)).astype(
             int
         )
-        # weights = np.asarray([0, 1, 1])
 
         # Solve the instance here in order to give upper bound on chi for compilation
         adj_mat = np.zeros(shape=(self.n, self.n))

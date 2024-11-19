@@ -6,7 +6,7 @@ import knapsack as knap_solver
 import numpy as np
 import sympy
 
-from .prob import ConvEfn, FuseEfn, Prob
+from .prob import ConvEfn, EncEfn, Prob
 
 
 class KnpConvEfn(ConvEfn):
@@ -52,7 +52,7 @@ class KnpConvEfn(ConvEfn):
         return super().compile(sub_dict)
 
 
-class KnpFuseEfn(FuseEfn):
+class KnpEncEfn(EncEfn):
     def __init__(self, n, cap, c_maxval):
         super().__init__()
         self.n = n
@@ -69,7 +69,7 @@ class KnpFuseEfn(FuseEfn):
         weights, costs = inst
         e_weights = jnp.append(-costs, self.n * self.c_maxval)
         return super().compile(
-            e_weights, lambda x: KnpFuseEfn.circuit(x, self.cap, weights)
+            e_weights, lambda x: KnpEncEfn.circuit(x, self.cap, weights)
         )
 
 
@@ -82,8 +82,8 @@ class Knp(Prob):
         self.c_minval = args.c_minval
         self.rel_cap = args.rel_cap
         self.cap = self.n * self.w_maxval * self.rel_cap
-        if args.fuse:
-            self.efn = KnpFuseEfn(self.n, self.cap, self.c_maxval)
+        if args.enc:
+            self.efn = KnpEncEfn(self.n, self.cap, self.c_maxval)
         else:
             self.efn = KnpConvEfn(self.n, self.cap, self.c_maxval)
 
@@ -118,7 +118,7 @@ class Knp(Prob):
 
     @staticmethod
     def gen_parser(subparser):
-        parser = subparser.add_parser("knp", help="Graph Coloring Problem")
+        parser = subparser.add_parser("knp", help="Knapsack Problem")
         parser.add_argument("-n", "--size", type=int, default=15)
         parser.add_argument("-w_minval", type=int, default=1)
         parser.add_argument("-w_maxval", type=int, default=10)
