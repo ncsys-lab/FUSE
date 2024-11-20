@@ -205,7 +205,7 @@ For Knapack, we have to add some additional variables for keeping track of the c
     invalid_expr = self.c_maxval * self.n * (weight_expr - cweight_expr) ** 2
     energy_expr = invalid_expr + cost_expr
 ```
-Now we create the algebraic expressions for the energy. We start by computing the cost of selected items, and negate the sum as a higher cost will lower our energy. We also compute the actual weight and the claimed weight. Finally, we create an `invalid_expr`, which raises the energy of invalid weight combinations by a large constant. Finally, we create the full `energy_expr` by summing the cost and invalid expressions.
+Now we create the algebraic expressions for the energy. We start by computing the cost of selected items, and negate the sum as a higher cost will lower our energy. We also compute the actual weight and the claimed weight. We create an `invalid_expr`, which raises the energy of invalid weight combinations by a large constant. Finally, we create the full `energy_expr` by summing the cost and invalid expressions.
 ```
     self.costs = costs
     self.weights = weights
@@ -215,8 +215,80 @@ We add the instance variable arrays as variables of the class. This is because w
     out_spins = np.hstack((spins, w_spins))
     return energy_expr, out_spins
 ```
-Finally, we flatten the spin array into one list, and return the energy expression and the list of spins.
-### Create Encoded Energy Function
-#### Using Circuit functions
+Finally, we flatten the spin array into one list, and return the energy expression and the list of spins. During initalization, the `ConvEfn` class will call `_gen_exprs` and compute their symbolic derivatives w.r.t the spin variables, leaving the instance variables symbolic. It also reduces squared variables to linear ones (as all values are boolean).
 
+The `compile` method is responsible for substituting in instance variables before calling the superclass `compile()`. It consumes a problem instance.
+```
+def compile(self, inst):
+    weights, costs = inst
+    weight_dict = {weight: inst_w for weight, inst_w in zip(self.weights, weights)}
+    cost_dict = {cost: inst_c for cost, inst_c in zip(self.costs, costs)}
+    sub_dict = {**weight_dict, **cost_dict}
+    return super().compile(sub_dict)
+```
+We get the numpy arrays from the problem instance tuple, and create dictionaries that map instance variables to their value (this is why we needed to save the symbolic variables during `_gen_exprs`). For convenience, we create two separate dictionaries for the two sets of instance variables, and merge them. We then pass this substitution dictionary to the superclass `compile()` method.
+
+The superclass compile method will perform the requisite substitutions and create a set of matrices `J, h` that can be used to efficiently compute values and gradients of conventional energy functions. It also performs a graph coloring to find sets of spins that can be updated in parallel.
+
+Our energy function is fully defined and is ready to be used with the simulator. Execution flow goes as follows:
+1. The main method will use the `parse` method to dispatch the arguments to the correct class:
+```
+prob, args = parse(parser, subparsers)
+res = execute(prob, args)
+```
+2. The execute method will instantiate our Problem using the arguments. This will also instantiate our chosen energy function, which generates the expressions and computes symbolic gradients:
+```
+def execute(Prob, args):
+    key = jax.random.key(args.seed)
+    start_time = time.perf_counter()
+    prob = Prob(args)
+    runtime = time.perf_counter() - start_time
+    print(f"[compile] Compile time was {runtime:0.2f}")
+    efn = prob.efn
+```
+3. The `run` method is called, which generates a random problem instance, and compiles it to our energy function:
+```
+def run(key, quick, iters, prob, efn, beta_i, betafn):
+    key, prob_key = jax.random.split(key)
+    prob_inst = prob.gen_inst(prob_key)
+    prob_sol = prob.sol_inst(prob_inst)
+
+    print("[lower] Lowering to p-computer...")
+    start_time = time.perf_counter()
+    engradfn, masks = efn.compile(prob_inst)
+    runtime = time.perf_counter() - start_time
+    print(f"[lower] Lowering time was {runtime:0.2f}")
+```
+The compile function returns a jax function `engradfn` which computes the energy and gradients over a set of spin variables, and the masks for parallel updates. From here, execution can begin.
+
+### Create Encoded Energy Function
+The process for creating Encoded energy functions is less involved. Encoded energy functions inherit from the `EncEfn` class, and must implement three methods: `__init__, circuit,` and `compile`.
+
+The purpse of the `init` method is mostly unchanged - we want to set variables that determine encoding circuit generation, although there are two notable differences: we call `super().__init__()` first, and we often set the `self.spins` variable to be a number, as opposed to a numpy array of symbols.
+```
+def __init__(self, n, cap, c_maxval):
+    super().__init__()
+    self.n = n
+    self.spins = n
+    self.cap = cap
+    self.c_maxval = c_maxval
+```
+The `circuit` method is a forward method that transforms an input `spins` (decision variables), along with some metadata, into problem variables. Note that this must be a boolean => boolean relation. Additionally, we employ the optimization described in section V.B.2 of the paper, where we linearize the energy function in the outputs of the encoding circuit. Thus, one must ensure that their energy function can be expressed as a linear combination of problem variables. In the knapsack case, we add another variable that is true if the selected items are larger than the capacity and zero otherwise. For maximum performance, this function should be "jit-able" and use JAX operations.
+```
+@staticmethod
+@jax.jit
+def circuit(spins, cap, weights):
+    return jnp.append(spins, (spins @ weights > cap).astype(int))
+```
+Finally, we create a `compile` method. This method creates a set of weights, which are dotted with the outputs of the encoding circuit output to determine the energy (and gradients). Additionally, we wrap the circuit function in a lambda that passes the metadata in, such that the only argument is the decision variables. We pass this to the super `compile` method.
+```
+def compile(self, inst):
+    weights, costs = inst
+    e_weights = jnp.append(-costs, self.n * self.c_maxval)
+    return super().compile(
+        e_weights, lambda x: KnpEncEfn.circuit(x, self.cap, weights)
+    )
+```
+The super `compile` method uses the differentation trick described in the paper to generate the `engradfn`. By default, the updates are all serial, although in some cases, it is possible to pass in a set of masks that define parallel updates for Encoded formulations. See `problems/col.py` for an example.
 #### Using Non-JAX functions
+We have written that any boolean input-output relation can be used as an encoding circuit. This extends to algorithms that may not be easily expressed in JAX. For this, we use a `jax.pure_callback` to call into other code. See `problems/stp.py` for an example using networkx's MST algorithm.
