@@ -30,7 +30,7 @@ def mute():
     pass
 
 
-def run(key, quick, iters, prob, efn, beta_i, betafn):
+def run(key, long, iters, prob, efn, betas):
     key, prob_key = jax.random.split(key)
     prob_inst = prob.gen_inst(prob_key)
     prob_sol = prob.sol_inst(prob_inst)
@@ -53,7 +53,7 @@ def run(key, quick, iters, prob, efn, beta_i, betafn):
 
     x = jnp.arange(iters)
 
-    def inner_loop(key, i, beta, state):
+    def inner_loop(key, i, state):
         key, subkey = jax.random.split(key)
         mask = masks[i % n_masks]
         energy, grad = engradfn(state, mask)
@@ -65,24 +65,23 @@ def run(key, quick, iters, prob, efn, beta_i, betafn):
                 state=jnp.astype(state, int),
             )
         rand = jax.random.uniform(subkey, shape=p)
-        pos = (jax.nn.sigmoid(-beta * grad) - rand > 0).flatten()
+        pos = (jax.nn.sigmoid(-betas[i] * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
-        beta = betafn(beta)
-        return key, beta, new_state, energy
+        return key, new_state, energy
 
-    if quick:
+    if not long:
 
         def while_inner(val):
-            (i, key, beta, state, energy) = val
-            key, beta, new_state, energy = inner_loop(key, i, beta, state)
-            return (i + 1, key, beta, new_state, energy)
+            (i, key, state, energy) = val
+            key, new_state, energy = inner_loop(key, i, state)
+            return (i + 1, key, new_state, energy)
 
         def cond_fun(val):
             (i, _, _, _, energy) = val
             return (i == 0) + (energy > prob_sol) * (i < iters)
 
-        init_pargs = (jnp.int64(0), run_key, beta_i, state, jnp.float64(0.0))
-        (i, _, _, state, energy) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
+        init_pargs = (jnp.int64(0), run_key, state, jnp.float64(0.0))
+        (i, _, state, energy) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
         min_energy = energy
         sol_cyc = i
         succ = energy <= prob_sol
@@ -93,11 +92,11 @@ def run(key, quick, iters, prob, efn, beta_i, betafn):
     else:
 
         def for_inner(pargs, i):
-            (key, beta, state) = pargs
-            key, beta, new_state, energy = inner_loop(key, i, beta, state)
-            return (key, beta, new_state), (state, energy)
+            (key, state) = pargs
+            key, new_state, energy = inner_loop(key, i, state)
+            return (key, new_state), (state, energy)
 
-        init_pargs = (run_key, beta_i, state)
+        init_pargs = (run_key, state)
         _, trace = jax.lax.scan(for_inner, init_pargs, x, iters)
 
         _, energies = trace
@@ -133,16 +132,20 @@ def execute(Prob, args):
 
     logger = Logger(args)
 
+    betas = jnp.linspace(args.beta_init, 10**args.beta_end, num=args.iters)
+
+    """
     @jax.jit
     def betafn(beta: float) -> float:
         if args.beta_log:
             raise NotImplementedError
         else:
             return beta + (10**args.beta_end - args.beta_init) / args.iters
+    """
 
     if args.trials is None:
         key, run_key = jax.random.split(key)
-        res = run(run_key, args.quick, args.iters, prob, efn, args.beta_init, betafn)
+        res = run(run_key, args.long, args.iters, prob, efn, betas)
         _, succ, cts, sol_qual, _ = res
 
         logger.log(run_key, res)
@@ -169,12 +172,11 @@ def execute(Prob, args):
                 p.imap(
                     partial(
                         run,
-                        quick=args.quick,
+                        long=args.long,
                         iters=args.iters,
                         prob=prob,
                         efn=efn,
-                        beta_i=args.beta_init,
-                        betafn=betafn,
+                        betas=betas,
                     ),
                     run_keys,
                 ),
@@ -211,10 +213,10 @@ if __name__ == "__main__":
         "-x", "--threads", type=int, default=6, help="Number of threads to use"
     )
     parser.add_argument(
-        "-q",
-        "--quick",
+        "-l",
+        "--long",
         action="store_true",
-        help="Enable quick execution via early exiting",
+        help="Disable quick execution via early exiting",
     )
     parser.add_argument(
         "-i",
