@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import knapsack as knap_solver
 import numpy as np
-import sympy
+import symengine as se
 
 from .prob import ConvEfn, EncEfn, Prob
 
@@ -19,16 +19,16 @@ class KnpConvEfn(ConvEfn):
     # Costs = higher is better
     # Weights = lower is better
     def _gen_exprs(self):
-        spins = np.array(sympy.symbols(f"s:{self.n}"))
-        costs = np.array(sympy.symbols(f"c:{self.n}"))
-        weights = np.array(sympy.symbols(f"w:{self.n}"))
+        spins = np.array(se.symbols(f"s:{self.n}"))
+        costs = np.array(se.symbols(f"c:{self.n}"))
+        weights = np.array(se.symbols(f"w:{self.n}"))
 
         cap = int(self.cap) + 1
         m = floor(log2(cap))
         vals = [1 << i for i in range(m)]
         vals.append(cap - (1 << m))
 
-        w_spins = np.array(sympy.symbols(f"ws:{len(vals)}"))
+        w_spins = np.array(se.symbols(f"ws:{len(vals)}"))
         vals = np.array(vals)
 
         cost_expr = -np.dot(spins, costs)

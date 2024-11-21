@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import sympy
+import symengine as se
 
 from circuit import SelectNet
 
@@ -20,12 +20,12 @@ class ColConvEfn(ConvEfn):
         super().__init__()
 
     def _gen_exprs(self):
-        spins = np.array(sympy.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
-        chi = np.array(sympy.symbols(f"x:{self.n}"))
-        weights = np.array(sympy.symbols(f"w:{self.n*(self.n-1)//2}"))
+        spins = np.array(se.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
+        chi = np.array(se.symbols(f"x:{self.n}"))
+        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
 
         idx1, idx2 = np.triu_indices_from(spins, k=1)
-        cost_expr = sympy.Add(
+        cost_expr = se.Add(
             *(weights[:, np.newaxis] * chi * spins[idx1] * spins[idx2]).flatten()
         )
 

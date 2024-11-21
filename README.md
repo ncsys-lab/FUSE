@@ -1,4 +1,4 @@
-# FUSE: A tool for expressing (Encoded) Energy Functions
+# FUSE: A tool for optimizing (Encoded) Energy Functions
 This is the implementation for the tool described in Efficient Optimization with Encoded Energy Functions (HPCA 2025, link pending). It allows one to define problems and various energy function mappings for those problems, along with a p-computing simulator.
 
 ## Installation
@@ -12,20 +12,36 @@ This will drop you in a bash instance ready to run FUSE.
 Alternatively, you can also use a virtual environment and install dependencies via  `pip install -r requirements.txt`. We have tested FUSE on Python3.11.
 
 ## Replicating Experiments
-You can use `scripts/run_{prob}_exps.sh` to run the encoded and conventional energy function experiments for a given problem. We report the runtimes for these experiments on a consumer-grade laptop CPU. We also report Quick runtimes, where simulations exit early if a solution equivalent to the approximation is found. This significantly speeds up runtimes for some encoded energy formulations, but potentially makes the solution quality worse (better solutions might be found if the simulation is allowed to run for longer).
-|Name|Problem|Runtime (HH:MM)|Quick Runtime (HH:MM)|
-|--|--|--|--|
-|col|Graph Coloring|-|-|
-|tsp|Traveling Salesman|-|-|
-|iso|Graph Isomorphism|-|-|
-|knp|Knapsack|-|-|
-|stp|Steiner Tree|-|-|
+### Table IV
+You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.
+|Name|Problem|Runtime (HH:MM:SS)|
+|--|--|--|
+|col|Graph Coloring|00:04:24|
+|tsp|Traveling Salesman|00:06:30|
+|iso|Graph Isomorphism|00:16:44|
+|knp|Knapsack|00:07:37|
+|stp|Steiner Tree|-|
 
+### Table V
+You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy function scaling experiments detailed in Table V (CtS and ESP numbers), or `scripts/run_t5_scale_quick.sh` to queue up all experiments. To get all the data (CtS, ESP, and solution quality metrics), run `scripts/run_{prob}_scale_long.sh` (or `scripts/run_t5_scale_long.sh` to queue up all experiments). These experiments do not exit early and thus runtimes can be long.
+|Name|Quick Runtime (HH:MM)|Long Runtime (HH:MM)|
+|--|--|--|
+|col|-|-|
+|tsp|-|-|
+|iso|-|-|
+|knp|-|-|
+|stp|-|-|
+
+### Table VI
+You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selection network to a size Log(N) selection network detailed in Table VI.
+|Name|Runtime (HH:MM)|
+|--|--|
+|col|-|
 
 ## Usage
 The main command is `solver.py`:
 ```
-python3 solver.py [-h] [-t TRIALS] [-q] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
+python3 solver.py [-h] [-t TRIALS] [-l] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
 ```
 There are many options, explained in detail later. To run a simple Traveling Salesman Problem example over 8 cities with a conventional quadratic energy function, run the following command:
 ```
@@ -73,7 +89,7 @@ The encoded energy function takes 25 cycles to find a solution as good as the ap
 -o, --overwrite       Overwrite existing log directory, if it exists (will error otherwise)
 -t TRIALS             Number of trials (unique problems) to test. Prints stats for values > 1
 -x THREADS            Number of threads to use for multiple trials
--q, --quick           Early exit simulation if approximate solution is found
+-l, --long            Disable early exiting to find best solution
 -i ITERS              (Maximum) Number of iterations run
 -s SEED,              Random seed used
 -f, --enc             Use Encoded Energy Function instead of conventional (default)
@@ -85,8 +101,8 @@ The encoded energy function takes 25 cycles to find a solution as good as the ap
 FUSE currently supports 6 problems (5 of which are described in the paper and are listed above, with Max-Cut having no encoded energy formulation). Each problem has some parameters, described in their respective `problems/{problem}.py` files.
 
 ## Adding New Problems/ Energy Functions
-This section is intended for users that want to extend FUSE to new problems. One can add a new problem in three steps:
-### Create Problem Definition and Register it
+This section is intended for users that want to extend FUSE to new problems. One can add a new problem in three steps.
+### Create a Problem Definition and Register it
 Problems inherit from the `Prob` class (`problems/prob.py`). Each problem is located in a file in `problems/{problem}.py` and must implement four methods: `gen_parser, __init__, gen_inst,` and `sol_inst`. We will use `knp` as an example. It's important to recognize that a Problem class is a template for generating random instances of a problem type, i.e. the Knp class gives methods to generate individual knapsack problems, but is not a knapsack problem instance in and of itself.
 
 `gen_parser` is a staticmethod that creates a parser which encodes various parameters of the problem generation. In `knp`, these parameters include the number of unique elements, the range of weights and costs, and the capacity of the bag. Additionally, one should define a three letter code for the problem that is used to uniquely identify it in the parser. This string should also be returned.
@@ -166,7 +182,7 @@ def parse(inparser, subparser):
     ...
 ```
 Our problem is registered, and we can now start writing our energy function(s).
-### Create Conventional Energy Function
+### Create a Conventional Energy Function
 Just as a Problem class is a template for generating problem instances, the Energy Function classes create methods to generate energy function instances for particular problem instances. Conventional Energy Functions inherit from the `ConvEfn` class in `problems/prob.py`, and must implement three methods, `__init__, _gen_exprs`, and `compile`.
 
 The `init` method is similar to the Problem `init` in that it sets parameters for the problem (such as the number of elements) rather than values for a specific instance. It is called during the Problem `init` method is called, when the energy function is instantiated.
@@ -186,7 +202,7 @@ def _gen_exprs(self):
     costs = np.array(sympy.symbols(f"c:{self.n}"))
     weights = np.array(sympy.symbols(f"w:{self.n}"))
 ```
-We begin by using sympy to create symbolic variables for the spins. For a particular problem instance, the final energy function should only be a function of the spins, but at initialization time, when this method is called, we do not have a problem instance yet. Thus, we will also create symbolic variables for the problem instance variables, which will be substituted in at compile-time. We package these as numpy arrays in order to use vector operations for faster manipulation.
+We begin by using sympy to create symbolic variables for the spins. For a particular problem instance, the final energy function should only be a function of the spins, but we do not yet have a problem instance when this method is called at initialization time. Thus, we will also create symbolic variables for the problem instance variables, which will be substituted in at compile-time. We package these as numpy arrays in order to use vector operations for faster manipulation.
 ```
     cap = int(self.cap) + 1
     m = floor(log2(cap))
@@ -261,7 +277,7 @@ def run(key, quick, iters, prob, efn, beta_i, betafn):
 ```
 The compile function returns a jax function `engradfn` which computes the energy and gradients over a set of spin variables, and the masks for parallel updates. From here, execution can begin.
 
-### Create Encoded Energy Function
+### Create an Encoded Energy Function
 The process for creating Encoded energy functions is less involved. Encoded energy functions inherit from the `EncEfn` class, and must implement three methods: `__init__, circuit,` and `compile`.
 
 The purpse of the `init` method is mostly unchanged - we want to set variables that determine encoding circuit generation, although there are two notable differences: we call `super().__init__()` first, and we often set the `self.spins` variable to be a number, as opposed to a numpy array of symbols.

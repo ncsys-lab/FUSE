@@ -3,7 +3,6 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import symengine as se
-import sympy
 
 from circuit import PermuteNet
 

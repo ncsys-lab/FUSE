@@ -33,11 +33,15 @@ class ConvEfn(Efn):
         square_dict = {spin**2: spin for spin in self.spins}
         self.energy_expr = self.energy_expr.expand().xreplace(square_dict)
 
+        zero_dict = {spin: 0 for spin in self.spins}
+        self.zero_expr = self.energy_expr.expand().xreplace(zero_dict)
+
         print("[generate] Calculating symbolic gradients...")
         self.grad_expr = [se.diff(self.energy_expr, spin) for spin in self.spins]
 
     def compile(self, sub_dict):
         energy_expr = self.energy_expr.xreplace(sub_dict).expand()
+        zero_expr = self.zero_expr.xreplace(sub_dict)
         grad_expr = se.Matrix(self.grad_expr).xreplace(sub_dict)
 
         energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
@@ -46,8 +50,7 @@ class ConvEfn(Efn):
         n_spins = len(energy_syms)
 
         if SMART_LOWER:
-            zero_dict = {spin: 0 for spin in energy_syms}
-            bias = jnp.array(float(energy_expr.subs(zero_dict)))
+            bias = jnp.asarray(float(zero_expr))
 
             fgrad_expr = se.Matrix(
                 [
@@ -102,7 +105,7 @@ class ConvEfn(Efn):
 
         ncolors = max(colors) + 1
         print(f"[lower] Used p-bits: {len(energy_syms)}")
-        print(f"[lower] Depedent colors: {ncolors}")
+        print(f"[lower] Dependent colors: {ncolors}")
 
         masks = np.zeros((ncolors, len(energy_syms)), dtype=np.bool_)
         masks[colors, np.arange(colors.size)] = 1

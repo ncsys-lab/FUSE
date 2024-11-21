@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import sympy
+import symengine as se
 
 from circuit import PermuteNet
 
@@ -23,11 +23,11 @@ class StpConvEfn(ConvEfn):
         max_ed = N // 2
         combos = N * (N - 1) // 2
 
-        v_depth = np.array(sympy.symbols(f"vd:{N * max_vd}")).reshape(N, max_vd)
-        v_sel = np.array(sympy.symbols(f"v:{N - T}"))
-        e_sel = np.array(sympy.symbols(f"e:{combos}"))
-        e_depth = np.array(sympy.symbols(f"ed:{N * N * max_ed}")).reshape(N, N, max_ed)
-        weights = np.array(sympy.symbols(f"w:{self.n*(self.n-1)//2}"))
+        v_depth = np.array(se.symbols(f"vd:{N * max_vd}")).reshape(N, max_vd)
+        v_sel = np.array(se.symbols(f"v:{N - T}"))
+        e_sel = np.array(se.symbols(f"e:{combos}"))
+        e_depth = np.array(se.symbols(f"ed:{N * N * max_ed}")).reshape(N, N, max_ed)
+        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
 
         idx = np.triu_indices(N, k=1)
         off_diag = ~np.eye(N, dtype=bool)
@@ -54,7 +54,7 @@ class StpConvEfn(ConvEfn):
         )[off_diag].sum()
 
         invalid_expr = (N * self.maxval) * (
-            sympy.Add(one_root, one_depth, one_depth_edge, edge_lower, edge_depth_adj)
+            se.Add(one_root, one_depth, one_depth_edge, edge_lower, edge_depth_adj)
         )
 
         energy_expr = invalid_expr + cost_expr

@@ -1,7 +1,7 @@
 import jax
 import networkx as nx
 import numpy as np
-import sympy
+import symengine as se
 
 from .prob import ConvEfn, Prob
 
@@ -12,8 +12,8 @@ class CutConvEfn(ConvEfn):
         super().__init__()
 
     def _gen_exprs(self):
-        spins = np.array(sympy.symbols(f"s:{self.n}"))[:, np.newaxis]
-        weights = np.array(sympy.symbols(f"w:{self.n*(self.n-1)//2}"))
+        spins = np.array(se.symbols(f"s:{self.n}"))[:, np.newaxis]
+        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
 
         n_spins = 1 - spins
         edge_mat = spins @ n_spins.T + n_spins @ spins.T
