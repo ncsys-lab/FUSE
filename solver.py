@@ -77,7 +77,7 @@ def run(key, long, iters, prob, efn, betas):
             return (i + 1, key, new_state, energy)
 
         def cond_fun(val):
-            (i, _, _, _, energy) = val
+            (i, _, _, energy) = val
             return (i == 0) + (energy > prob_sol) * (i < iters)
 
         init_pargs = (jnp.int64(0), run_key, state, jnp.float64(0.0))
@@ -132,16 +132,10 @@ def execute(Prob, args):
 
     logger = Logger(args)
 
-    betas = jnp.linspace(args.beta_init, 10**args.beta_end, num=args.iters)
-
-    """
-    @jax.jit
-    def betafn(beta: float) -> float:
-        if args.beta_log:
-            raise NotImplementedError
-        else:
-            return beta + (10**args.beta_end - args.beta_init) / args.iters
-    """
+    if args.beta_log:
+        betas = jnp.logspace(args.beta_init, args.beta_end, num=args.iters)
+    else:
+        betas = jnp.linspace(args.beta_init, 10**args.beta_end, num=args.iters)
 
     if args.trials is None:
         key, run_key = jax.random.split(key)
@@ -194,7 +188,7 @@ def execute(Prob, args):
 
         esp = succs / args.trials
         esp_10 = succs_10 / args.trials
-        print_run_stats(esp, esp_10, ctss, sol_quals, sol_cycs)
+        print_run_stats(args.long, args.iters, esp, esp_10, ctss, sol_quals, sol_cycs)
 
 
 def parse(inparser, subparser):
@@ -225,7 +219,7 @@ if __name__ == "__main__":
         help="(Maximum) number of iterations",
         default=1000000,
     )
-    parser.add_argument("-s", "--seed", type=int, help="Random Seed", default=0)
+    parser.add_argument("-s", "--seed", type=int, help="Random Seed", default=42)
     parser.add_argument(
         "-f", "--enc", action="store_true", help="Use Encoded Energy Function"
     )

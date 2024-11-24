@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import symengine as se
-import sympy
-
-SMART_LOWER = True
 
 
 class Prob:
@@ -45,63 +42,65 @@ class ConvEfn(Efn):
         grad_expr = se.Matrix(self.grad_expr).xreplace(sub_dict)
 
         energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
-        grad_syms = [s for s in self.spins if s in grad_expr.free_symbols]
 
         n_spins = len(energy_syms)
 
-        if SMART_LOWER:
-            bias = jnp.asarray(float(zero_expr))
+        bias = jnp.asarray(float(zero_expr))
 
-            fgrad_expr = se.Matrix(
-                [
-                    expr
-                    for (expr, s) in zip(grad_expr, self.spins)
-                    if s in energy_expr.free_symbols
-                ]
+        fgrad_expr = se.Matrix(
+            [
+                expr
+                for (expr, s) in zip(grad_expr, self.spins)
+                if s in energy_expr.free_symbols
+            ]
+        )
+        segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
+        # seenergy = se.LambdifyCSE([energy_syms], energy_expr)
+
+        h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
+        J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)]) / 2
+
+        @jax.jit
+        def engradfn(x, _):
+            Jx = jnp.dot(J, x)
+            grad = Jx + h
+            energy = jnp.dot(grad, x) + bias
+
+            """
+            grad_1 = jax.pure_callback(
+                segrad,
+                jax.ShapeDtypeStruct(
+                    (n_spins, 1),
+                    dtype="float64",
+                ),
+                x,
+            ).reshape((n_spins,))
+
+            jax.debug.print(
+                "state:{state}\ngrad:\t{grad}\t{grad_1}",
+                state=x,
+                grad=grad,
+                grad_1=grad_1,
             )
-            segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
 
-            h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
-            J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)]) / 2
-
-            @jax.jit
-            def engradfn(x, _):
-                grad = jnp.dot(J, x) + h
-                energy = jnp.dot(grad, x) + bias
-                return (energy, grad)
-
-            color_dict = nx.greedy_color(nx.from_numpy_array(J))
-            colors = np.fromiter(
-                [color_dict[spin] for spin in range(n_spins)], dtype=int
+            energy_1 = jax.pure_callback(
+                seenergy,
+                jax.ShapeDtypeStruct(
+                    (),
+                    dtype="float64",
+                ),
+                x,
             )
-
-        else:
-            fgrad_expr = sympy.Matrix(
-                [
-                    expr
-                    for (expr, s) in zip(grad_expr, self.spins)
-                    if s in energy_expr.free_symbols
-                ]
+            jax.debug.print(
+                "ener_ALLCLOSE:\t{close}",
+                close=jnp.allclose(energy, energy_1),
             )
-            gradfn = sympy.lambdify(energy_syms, fgrad_expr, modules="jax")
-            energyfn = sympy.lambdify(grad_syms, energy_expr, modules="jax")
+            """
 
-            @jax.jit
-            def engradfn(x, _):
-                energy = energyfn(x)
-                grad = gradfn(x)
-                return (energy, grad)
+            return (energy, grad)
 
-            g = nx.Graph()
-            for spin in energy_syms:
-                g.add_node(spin)
-
-            for spin, expr in zip(energy_syms, fgrad_expr):
-                for dep in expr.free_symbols:
-                    g.add_edge(spin, dep)
-
-            color_dict = nx.greedy_color(g)
-            colors = np.fromiter([color_dict[spin] for spin in energy_syms], dtype=int)
+        color_dict = nx.greedy_color(nx.from_numpy_array(J))
+        colors = np.fromiter([color_dict[spin] for spin in range(n_spins)], dtype=int)
 
         ncolors = max(colors) + 1
         print(f"[lower] Used p-bits: {len(energy_syms)}")
