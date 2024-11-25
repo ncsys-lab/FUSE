@@ -16,11 +16,12 @@ Alternatively, you can also use a virtual environment and install dependencies v
 You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.
 |Name|Problem|Runtime (HH:MM:SS)|
 |--|--|--|
-|col|Graph Coloring|00:04:24|
-|tsp|Traveling Salesman|00:06:30|
+|col|Graph Coloring|00:03:57|
+|tsp|Traveling Salesman|00:06:37|
 |iso|Graph Isomorphism|00:16:44|
 |knp|Knapsack|00:07:37|
 |stp|Steiner Tree|-|
+|Total||-|
 
 ### Table V
 You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy function scaling experiments detailed in Table V (CtS and ESP numbers), or `scripts/run_t5_scale_quick.sh` to queue up all experiments. To get all the data (CtS, ESP, and solution quality metrics), run `scripts/run_{prob}_scale_long.sh` (or `scripts/run_t5_scale_long.sh` to queue up all experiments). These experiments do not exit early and thus runtimes can be long.
@@ -31,12 +32,13 @@ You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy functi
 |iso|-|-|
 |knp|-|-|
 |stp|-|-|
+|Total||-|
 
 ### Table VI
 You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selection network to a size Log(N) selection network detailed in Table VI.
-|Name|Runtime (HH:MM)|
+|Name|Runtime (HH:MM:SS)|
 |--|--|
-|col|-|
+|col|00:03:59|
 
 ## Usage
 The main command is `solver.py`:

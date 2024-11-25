@@ -30,6 +30,7 @@ class Logger:
         log_file = f"{self.log_dir}/0x{key0:08X}_{key1:08X}.log"
         jnp.savez(
             log_file,
+            idx=self.log_idx,
             prob_sol=prob_sol,
             succ=succ[0],
             succ_10=succ[1],
@@ -39,3 +40,7 @@ class Logger:
             states=states,
             energies=energies,
         )
+
+    @staticmethod
+    def load_log(log_file):
+        return jnp.load(log_file)
