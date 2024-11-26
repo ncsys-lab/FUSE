@@ -56,7 +56,7 @@ def run(key, long, iters, prob, efn, betas):
     def inner_loop(key, i, state):
         key, subkey = jax.random.split(key)
         mask = masks[i % n_masks]
-        energy, grad = engradfn(state, mask)
+        energy, valid, grad = engradfn(state, mask)
         if DEBUG:
             jax.debug.print(
                 "{i}:\tEnergy: {energy}\t, State: {state}",
@@ -67,21 +67,21 @@ def run(key, long, iters, prob, efn, betas):
         rand = jax.random.uniform(subkey, shape=p)
         pos = (jax.nn.sigmoid(-betas[i] * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
-        return key, new_state, energy
+        return key, new_state, energy, valid
 
     if not long:
 
         def while_inner(val):
-            (i, key, state, energy) = val
-            key, new_state, energy = inner_loop(key, i, state)
-            return (i + 1, key, new_state, energy)
+            (i, key, state, energy, valid) = val
+            key, new_state, energy, valid = inner_loop(key, i, state)
+            return (i + 1, key, new_state, energy, valid)
 
         def cond_fun(val):
-            (i, _, _, energy) = val
+            (i, _, _, energy, _) = val
             return (i == 0) + (energy > prob_sol) * (i < iters)
 
-        init_pargs = (jnp.int64(0), run_key, state, jnp.float64(0.0))
-        (i, _, state, energy) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
+        init_pargs = (jnp.int64(0), run_key, state, jnp.float64(0.0), False)
+        (i, _, state, energy, _) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
         min_energy = energy
         sol_cyc = i
         succ = energy <= prob_sol
@@ -93,13 +93,13 @@ def run(key, long, iters, prob, efn, betas):
 
         def for_inner(pargs, i):
             (key, state) = pargs
-            key, new_state, energy = inner_loop(key, i, state)
-            return (key, new_state), (state, energy)
+            key, new_state, energy, valid = inner_loop(key, i, state)
+            return (key, new_state), (state, energy, valid)
 
         init_pargs = (run_key, state)
         _, trace = jax.lax.scan(for_inner, init_pargs, x, iters)
 
-        _, energies = trace
+        _, energies, _ = trace
         min_energy = jnp.min(energies)
         sol_cyc = jnp.argmin(energies)
         gated = energies <= prob_sol
@@ -235,7 +235,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-lr",
         "--log_rate",
-        default=0.001,
+        default=0.1,
+        type=float,
         help="Proportion of logs to keep",
     )
     parser.add_argument(

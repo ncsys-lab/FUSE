@@ -126,7 +126,10 @@ class Col(Prob):
         self.n = args.size
         self.nu = args.connectivity
         if args.enc:
-            self.efn = ColEncEfn(self.n)
+            if args.logn:
+                self.efn = ColLogEncEfn(self.n)
+            else:
+                self.efn = ColEncEfn(self.n)
         else:
             self.efn = ColConvEfn(self.n)
 
@@ -150,4 +153,5 @@ class Col(Prob):
         parser = subparser.add_parser("col", help="Graph Coloring Problem")
         parser.add_argument("-n", "--size", type=int, default=15)
         parser.add_argument("-nu", "--connectivity", type=float, default=0.5)
+        parser.add_argument("--logn", action="store_true")
         return "col"

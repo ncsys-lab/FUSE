@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -15,16 +16,19 @@ class Logger:
         self.log_idx = (jnp.arange(args.iters * args.log_rate) / args.log_rate).astype(
             int
         )
+        print(self.log_idx)
 
     def log(self, run_key, res):
         prob_sol, succ, cts, sol_qual, trace = res
         if trace is not None:
-            states, energies = trace
+            states, energies, valids = trace
             states = states[self.log_idx]
             energies = energies[self.log_idx]
+            valids = valids[self.log_idx]
         else:
             states = []
             energies = []
+            valids = []
 
         key0, key1 = jax.random.key_data(run_key)
         log_file = f"{self.log_dir}/0x{key0:08X}_{key1:08X}.log"
@@ -39,8 +43,16 @@ class Logger:
             sol_cyc=sol_qual[1],
             states=states,
             energies=energies,
+            valids=valids,
         )
 
     @staticmethod
     def load_log(log_file):
         return jnp.load(log_file)
+
+    @staticmethod
+    def get_plot_file(log_file):
+        plot_path = Path(log_file.replace("log", "plot"))
+        plot_file = plot_path.parent.joinpath(plot_path.stem)
+        plot_file.parent.mkdir(parents=True, exist_ok=True)
+        return plot_file

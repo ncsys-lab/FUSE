@@ -1,4 +1,5 @@
 venv/
 log/
+plot/
 .DS_Store
 *__pycache__*

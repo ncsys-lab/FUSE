@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import symengine as se
+from jax.experimental import sparse
 
 
 class Prob:
@@ -25,49 +26,85 @@ class Efn:
 class ConvEfn(Efn):
     def __init__(self):
         print("[generate] Generating energy function...")
-        (self.energy_expr, self.spins) = self._gen_exprs()
+        (self.valid_expr, self.cost_expr, self.spins) = self._gen_exprs()
 
         square_dict = {spin**2: spin for spin in self.spins}
-        self.energy_expr = self.energy_expr.expand().xreplace(square_dict)
+        self.cost_expr = self.cost_expr.expand().xreplace(square_dict)
+        self.valid_expr = self.valid_expr.expand().xreplace(square_dict)
 
         zero_dict = {spin: 0 for spin in self.spins}
-        self.zero_expr = self.energy_expr.expand().xreplace(zero_dict)
+        self.zero_valid_expr = self.valid_expr.expand().xreplace(zero_dict)
+        self.zero_cost_expr = self.cost_expr.expand().xreplace(zero_dict)
 
         print("[generate] Calculating symbolic gradients...")
-        self.grad_expr = [se.diff(self.energy_expr, spin) for spin in self.spins]
+        self.grad_valid_expr = [se.diff(self.valid_expr, spin) for spin in self.spins]
+        self.grad_cost_expr = [se.diff(self.cost_expr, spin) for spin in self.spins]
 
-    def compile(self, sub_dict):
-        energy_expr = self.energy_expr.xreplace(sub_dict).expand()
-        zero_expr = self.zero_expr.xreplace(sub_dict)
-        grad_expr = se.Matrix(self.grad_expr).xreplace(sub_dict)
+    def _create_mats(
+        self, in_expr, sub_dict, do_eval=False, sub_spins=None, in_grad_expr=None
+    ):
+        expr = in_expr.xreplace(sub_dict).expand()
+        if do_eval:
+            return jnp.asarray(float(expr))
 
-        energy_syms = [s for s in self.spins if s in energy_expr.free_symbols]
+        assert (
+            in_grad_expr is not None
+        ), "Did not pass in gradient expression when do_eval was False!"
 
-        n_spins = len(energy_syms)
+        if sub_spins is None:
+            print("making subspins")
+            sub_spins = [s for s in self.spins if s in expr.free_symbols]
 
-        bias = jnp.asarray(float(zero_expr))
+        n_spins = len(sub_spins)
 
+        grad_expr = se.Matrix(in_grad_expr).xreplace(sub_dict)
         fgrad_expr = se.Matrix(
             [
-                expr
-                for (expr, s) in zip(grad_expr, self.spins)
-                if s in energy_expr.free_symbols
+                subexpr
+                for subexpr, s in zip(grad_expr, self.spins)
+                if s in expr.free_symbols
             ]
         )
-        segrad = se.LambdifyCSE([energy_syms], fgrad_expr)
-        # seenergy = se.LambdifyCSE([energy_syms], energy_expr)
 
+        assert len(fgrad_expr) == n_spins
+
+        segrad = se.LambdifyCSE([sub_spins], fgrad_expr)
         h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
         J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)]) / 2
 
+        return sub_spins, segrad, J, h
+
+    def compile(self, sub_dict):
+        energy_syms, valid_exprs, Jv, hv = self._create_mats(
+            self.valid_expr, sub_dict, in_grad_expr=self.grad_valid_expr
+        )
+        n_spins = len(energy_syms)
+
+        _, cost_exprs, Jc, hc = self._create_mats(
+            self.cost_expr,
+            sub_dict,
+            sub_spins=energy_syms,
+            in_grad_expr=self.grad_cost_expr,
+        )
+
+        bv = self._create_mats(self.zero_valid_expr, sub_dict, do_eval=True)
+        bc = self._create_mats(self.zero_cost_expr, sub_dict, do_eval=True)
+
+        J = Jc + Jv
+
         @jax.jit
         def engradfn(x, _):
-            Jx = jnp.dot(J, x)
-            grad = Jx + h
-            energy = jnp.dot(grad, x) + bias
+            grad_c = jnp.dot(Jc, x) + hc
+            grad_v = jnp.dot(Jv, x) + hv
+
+            valid = jnp.dot(grad_v, x) + bv
+            cost = jnp.dot(grad_c, x) + bc
+
+            grad = grad_c + grad_v
+            energy = valid + cost
 
             """
-            grad_1 = jax.pure_callback(
+            grad = jax.pure_callback(
                 segrad,
                 jax.ShapeDtypeStruct(
                     (n_spins, 1),
@@ -75,15 +112,7 @@ class ConvEfn(Efn):
                 ),
                 x,
             ).reshape((n_spins,))
-
-            jax.debug.print(
-                "state:{state}\ngrad:\t{grad}\t{grad_1}",
-                state=x,
-                grad=grad,
-                grad_1=grad_1,
-            )
-
-            energy_1 = jax.pure_callback(
+            energy = jax.pure_callback(
                 seenergy,
                 jax.ShapeDtypeStruct(
                     (),
@@ -91,13 +120,8 @@ class ConvEfn(Efn):
                 ),
                 x,
             )
-            jax.debug.print(
-                "ener_ALLCLOSE:\t{close}",
-                close=jnp.allclose(energy, energy_1),
-            )
             """
-
-            return (energy, grad)
+            return (energy, (valid < 0.01), grad)
 
         color_dict = nx.greedy_color(nx.from_numpy_array(J))
         colors = np.fromiter([color_dict[spin] for spin in range(n_spins)], dtype=int)
@@ -135,7 +159,7 @@ class EncEfn(Efn):
                 o_energy = jnp.dot(weights, circuitfn(o_state)).astype("float64")
 
                 energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
-                return energy, o_energy - z_energy
+                return energy, True, o_energy - z_energy
 
             masks = jnp.asarray(np.eye(self.spins, dtype=np.bool_))
 
@@ -147,6 +171,6 @@ class EncEfn(Efn):
                 flip_state = jnp.logical_xor(state, jnp.eye(self.spins))
                 flip_energy = jnp.dot(vcircuitfn(flip_state), weights)
                 grad = (2 * state - 1) * (energy - flip_energy)
-                return energy, grad
+                return energy, True, grad
 
         return engradfn, masks
