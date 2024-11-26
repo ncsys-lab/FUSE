@@ -8,15 +8,14 @@ import jax.numpy as jnp
 class Logger:
     def __init__(self, args):
         efn_str = "enc" if args.enc else "conv"
-        beta_str = f"b{args.beta_init:0.2f}_{args.beta_end:0.2f}_{'log' if args.beta_log else 'lin'}"
-        log_dir = f"log/{args.problem}_n{args.size}_{efn_str}_{beta_str}_s{args.seed}"
+        beta_str = f"b{args.beta_init:0.2f}_{args.beta_end:0.2f}_{'logs' if args.beta_log else 'lin'}"
+        log_dir = f"logs/{args.problem}_n{args.size}_{efn_str}_{beta_str}_s{args.seed}"
         exist_ok = args.overwrite if args.trials else True
         os.makedirs(log_dir, exist_ok=exist_ok)
         self.log_dir = log_dir
         self.log_idx = (jnp.arange(args.iters * args.log_rate) / args.log_rate).astype(
             int
         )
-        print(self.log_idx)
 
     def log(self, run_key, res):
         prob_sol, succ, cts, sol_qual, trace = res
@@ -52,7 +51,7 @@ class Logger:
 
     @staticmethod
     def get_plot_file(log_file):
-        plot_path = Path(log_file.replace("log", "plot"))
+        plot_path = Path(log_file.replace("logs", "plots"))
         plot_file = plot_path.parent.joinpath(plot_path.stem)
         plot_file.parent.mkdir(parents=True, exist_ok=True)
         return plot_file

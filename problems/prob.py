@@ -52,7 +52,6 @@ class ConvEfn(Efn):
         ), "Did not pass in gradient expression when do_eval was False!"
 
         if sub_spins is None:
-            print("making subspins")
             sub_spins = [s for s in self.spins if s in expr.free_symbols]
 
         n_spins = len(sub_spins)
