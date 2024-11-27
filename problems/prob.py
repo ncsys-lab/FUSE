@@ -1,3 +1,4 @@
+import functools as ft
 import time
 from abc import abstractmethod
 
@@ -26,7 +27,13 @@ class Efn:
 class ConvEfn(Efn):
     def __init__(self):
         print("[generate] Generating energy function...")
-        (self.valid_expr, self.cost_expr, self.spins) = self._gen_exprs()
+        self.valid_expr, self.cost_expr, self.spins = self._gen_exprs()
+
+        @jax.jit
+        def dispatch_fn(spins):
+            return jnp.split(spins, self.dispatch_idx)
+
+        self.dispatch_fn = dispatch_fn
 
         square_dict = {spin**2: spin for spin in self.spins}
         self.cost_expr = self.cost_expr.expand().xreplace(square_dict)
@@ -40,6 +47,17 @@ class ConvEfn(Efn):
         self.grad_valid_expr = [se.diff(self.valid_expr, spin) for spin in self.spins]
         self.grad_cost_expr = [se.diff(self.cost_expr, spin) for spin in self.spins]
         self.sparse = False
+
+        self.grad_expr = list(
+            se.Matrix(self.grad_valid_expr) + se.Matrix(self.grad_cost_expr)
+        )
+
+        vars = np.hstack((self.spins, self.weights))
+        """
+        self.grad_fn = se.LambdifyCSE([vars], self.grad_expr)
+        self.valid_fn = se.LambdifyCSE([vars], self.valid_expr)
+        self.cost_fn = se.LambdifyCSE([vars], self.cost_expr)
+        """
 
     def _gen_mats(self, n_spins, gradfn):
         h = jnp.array(gradfn(np.zeros(n_spins))).squeeze()
@@ -75,25 +93,25 @@ class ConvEfn(Efn):
 
         return sub_spins, (fgrad_expr, expr)
 
-    def compile(self, sub_dict):
-        energy_syms, (valid_grad_expr, valid_ener_expr) = self._lower_expr(
-            self.valid_expr, sub_dict, in_grad_expr=self.grad_valid_expr
-        )
-        n_spins = len(energy_syms)
-
-        def compile_cse(in_expr):
-            return se.LambdifyCSE([energy_syms], in_expr)
-
-        _, (cost_grad_expr, cost_ener_expr) = self._lower_expr(
-            self.cost_expr,
-            sub_dict,
-            sub_spins=energy_syms,
-            in_grad_expr=self.grad_cost_expr,
-        )
-
+    def compile(self, sub_dict_or_inst):
         if not self.sparse:
-            bv = self._lower_expr(self.zero_valid_expr, sub_dict, do_eval=True)
-            bc = self._lower_expr(self.zero_cost_expr, sub_dict, do_eval=True)
+            energy_syms, (valid_grad_expr, valid_ener_expr) = self._lower_expr(
+                self.valid_expr, sub_dict_or_inst, in_grad_expr=self.grad_valid_expr
+            )
+            n_spins = len(energy_syms)
+
+            def compile_cse(in_expr):
+                return se.LambdifyCSE([energy_syms], in_expr)
+
+            _, (cost_grad_expr, cost_ener_expr) = self._lower_expr(
+                self.cost_expr,
+                sub_dict_or_inst,
+                sub_spins=energy_syms,
+                in_grad_expr=self.grad_cost_expr,
+            )
+
+            bv = self._lower_expr(self.zero_valid_expr, sub_dict_or_inst, do_eval=True)
+            bc = self._lower_expr(self.zero_cost_expr, sub_dict_or_inst, do_eval=True)
 
             valid_grad_fn = compile_cse(valid_grad_expr)
             cost_grad_fn = compile_cse(cost_grad_expr)
@@ -124,28 +142,56 @@ class ConvEfn(Efn):
             )
 
         else:
-            grad_expr = valid_grad_expr + cost_grad_expr
+            valid_fn = jax.jit(ft.partial(self.valid_fn, inst=sub_dict_or_inst))
+            cost_fn = jax.jit(ft.partial(self.cost_fn, inst=sub_dict_or_inst))
+
+            @jax.jit
+            def engradfn(x, _):
+                valid, grad_v = jax.value_and_grad(valid_fn)(x)
+                cost, grad_c = jax.value_and_grad(cost_fn)(x)
+
+                energy = valid + cost
+                grad = grad_c + grad_v
+                return (energy, (valid < 0.01), grad)
+
+            energy_syms = self.spins
+            n_spins = len(energy_syms)
+            """
             grad_fn = compile_cse(grad_expr)
             valid_fn = compile_cse(valid_ener_expr)
             cost_fn = compile_cse(cost_ener_expr)
+            """
 
             nx1_type = jax.ShapeDtypeStruct((n_spins, 1), dtype="float64")
             x1_type = jax.ShapeDtypeStruct((), dtype="float64")
 
+            # weights = jnp.asarray(list(sub_dict.values()))
+            # print(weights)
+            """
             @jax.jit
             def engradfn(x, _):
-                grad = jax.pure_callback(grad_fn, nx1_type, x)
-                valid = jax.pure_callback(valid_fn, x1_type, x)
-                cost = jax.pure_callback(cost_fn, x1_type, x)
+                input = jnp.hstack((x, weights))
+                grad = jax.pure_callback(self.grad_fn, nx1_type, input)
+                valid = jax.pure_callback(self.valid_fn, x1_type, input)
+                cost = jax.pure_callback(self.cost_fn, x1_type, input)
                 energy = valid + cost
+
+                jax.debug.print(
+                    "hello {input} {grad} {valid} {cost}\n",
+                    input=input,
+                    grad=grad,
+                    valid=valid,
+                    cost=cost,
+                )
                 return (energy, (valid < 0.01), grad)
+            """
 
             dep_graph = nx.Graph()
 
             for sym in energy_syms:
                 dep_graph.add_node(sym)
 
-            for bit, expr in zip(energy_syms, grad_expr):
+            for bit, expr in zip(energy_syms, self.grad_expr):
                 for dep in expr.free_symbols:
                     dep_graph.add_edge(bit, dep)
 

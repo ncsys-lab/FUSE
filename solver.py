@@ -47,14 +47,15 @@ def run(key, long, iters, prob, efn, betas):
     p = masks[0].shape
 
     key, state_key = jax.random.split(key)
-    state = jax.random.bernoulli(state_key, shape=p).astype(int)
+    state = jax.random.bernoulli(state_key, shape=p).astype(float)
 
     key, run_key = jax.random.split(key)
 
+    rand = jax.random.uniform(run_key, shape=(iters,))
+    # key, subkey = jax.random.split(key)
     x = jnp.arange(iters)
 
     def inner_loop(key, i, state):
-        key, subkey = jax.random.split(key)
         mask = masks[i % n_masks]
         energy, valid, grad = engradfn(state, mask)
         if DEBUG:
@@ -64,8 +65,7 @@ def run(key, long, iters, prob, efn, betas):
                 energy=energy,
                 state=jnp.astype(state, int),
             )
-        rand = jax.random.uniform(subkey)
-        pos = (jax.nn.sigmoid(-betas[i] * grad) - rand > 0).flatten()
+        pos = (jax.nn.sigmoid(-betas[i] * grad) - rand[i] > 1).flatten()
         new_state = jnp.where(mask, pos, state)
         return key, new_state, energy, valid
 
