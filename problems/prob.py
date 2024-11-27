@@ -39,9 +39,20 @@ class ConvEfn(Efn):
         print("[generate] Calculating symbolic gradients...")
         self.grad_valid_expr = [se.diff(self.valid_expr, spin) for spin in self.spins]
         self.grad_cost_expr = [se.diff(self.cost_expr, spin) for spin in self.spins]
+        self.sparse = False
 
-    def _create_mats(
-        self, in_expr, sub_dict, do_eval=False, sub_spins=None, in_grad_expr=None
+    def _gen_mats(self, n_spins, gradfn):
+        h = jnp.array(gradfn(np.zeros(n_spins))).squeeze()
+        J = jnp.array([gradfn(row).squeeze() - h for row in np.eye(n_spins)])
+        return J, h
+
+    def _lower_expr(
+        self,
+        in_expr,
+        sub_dict,
+        do_eval=False,
+        sub_spins=None,
+        in_grad_expr=None,
     ):
         expr = in_expr.xreplace(sub_dict).expand()
         if do_eval:
@@ -58,72 +69,88 @@ class ConvEfn(Efn):
 
         grad_expr = se.Matrix(in_grad_expr).xreplace(sub_dict)
         fgrad_expr = se.Matrix(
-            [
-                subexpr
-                for subexpr, s in zip(grad_expr, self.spins)
-                if s in expr.free_symbols
-            ]
+            [subexpr for subexpr, s in zip(grad_expr, self.spins) if s in sub_spins]
         )
-
         assert len(fgrad_expr) == n_spins
 
-        segrad = se.LambdifyCSE([sub_spins], fgrad_expr)
-        h = jnp.array(segrad(np.zeros(n_spins))).squeeze()
-        J = jnp.array([segrad(row).squeeze() - h for row in np.eye(n_spins)]) / 2
-
-        return sub_spins, segrad, J, h
+        return sub_spins, (fgrad_expr, expr)
 
     def compile(self, sub_dict):
-        energy_syms, valid_exprs, Jv, hv = self._create_mats(
+        energy_syms, (valid_grad_expr, valid_ener_expr) = self._lower_expr(
             self.valid_expr, sub_dict, in_grad_expr=self.grad_valid_expr
         )
         n_spins = len(energy_syms)
 
-        _, cost_exprs, Jc, hc = self._create_mats(
+        def compile_cse(in_expr):
+            return se.LambdifyCSE([energy_syms], in_expr)
+
+        _, (cost_grad_expr, cost_ener_expr) = self._lower_expr(
             self.cost_expr,
             sub_dict,
             sub_spins=energy_syms,
             in_grad_expr=self.grad_cost_expr,
         )
 
-        bv = self._create_mats(self.zero_valid_expr, sub_dict, do_eval=True)
-        bc = self._create_mats(self.zero_cost_expr, sub_dict, do_eval=True)
+        if not self.sparse:
+            bv = self._lower_expr(self.zero_valid_expr, sub_dict, do_eval=True)
+            bc = self._lower_expr(self.zero_cost_expr, sub_dict, do_eval=True)
 
-        J = Jc + Jv
+            valid_grad_fn = compile_cse(valid_grad_expr)
+            cost_grad_fn = compile_cse(cost_grad_expr)
 
-        @jax.jit
-        def engradfn(x, _):
-            grad_c = jnp.dot(Jc, x) + hc
-            grad_v = jnp.dot(Jv, x) + hv
+            Jv, hv = self._gen_mats(n_spins, valid_grad_fn)
+            Jc, hc = self._gen_mats(n_spins, cost_grad_fn)
 
-            valid = jnp.dot(grad_v, x) + bv
-            cost = jnp.dot(grad_c, x) + bc
+            J = Jc + Jv
 
-            grad = grad_c + grad_v
-            energy = valid + cost
+            @jax.jit
+            def engradfn(x, _):
+                Jcx = jnp.dot(Jc, x)
+                Jvx = jnp.dot(Jv, x)
+                grad_c = Jcx + hc
+                grad_v = Jvx + hv
 
-            """
-            grad = jax.pure_callback(
-                segrad,
-                jax.ShapeDtypeStruct(
-                    (n_spins, 1),
-                    dtype="float64",
-                ),
-                x,
-            ).reshape((n_spins,))
-            energy = jax.pure_callback(
-                seenergy,
-                jax.ShapeDtypeStruct(
-                    (),
-                    dtype="float64",
-                ),
-                x,
+                valid = jnp.dot(Jvx / 2 + hv, x) + bv
+                cost = jnp.dot(Jcx / 2 + hc, x) + bc
+
+                grad = grad_c + grad_v
+                energy = valid + cost
+                return (energy, (valid < 0.01), grad)
+
+            dep_graph = nx.from_numpy_array(J)
+            color_dict = nx.greedy_color(dep_graph)
+            colors = np.fromiter(
+                [color_dict[spin] for spin in range(n_spins)], dtype=int
             )
-            """
-            return (energy, (valid < 0.01), grad)
 
-        color_dict = nx.greedy_color(nx.from_numpy_array(J))
-        colors = np.fromiter([color_dict[spin] for spin in range(n_spins)], dtype=int)
+        else:
+            grad_expr = valid_grad_expr + cost_grad_expr
+            grad_fn = compile_cse(grad_expr)
+            valid_fn = compile_cse(valid_ener_expr)
+            cost_fn = compile_cse(cost_ener_expr)
+
+            nx1_type = jax.ShapeDtypeStruct((n_spins, 1), dtype="float64")
+            x1_type = jax.ShapeDtypeStruct((), dtype="float64")
+
+            @jax.jit
+            def engradfn(x, _):
+                grad = jax.pure_callback(grad_fn, nx1_type, x)
+                valid = jax.pure_callback(valid_fn, x1_type, x)
+                cost = jax.pure_callback(cost_fn, x1_type, x)
+                energy = valid + cost
+                return (energy, (valid < 0.01), grad)
+
+            dep_graph = nx.Graph()
+
+            for sym in energy_syms:
+                dep_graph.add_node(sym)
+
+            for bit, expr in zip(energy_syms, grad_expr):
+                for dep in expr.free_symbols:
+                    dep_graph.add_edge(bit, dep)
+
+            color_dict = nx.greedy_color(dep_graph)
+            colors = np.fromiter([color_dict[sym] for sym in energy_syms], dtype=int)
 
         ncolors = max(colors) + 1
         print(f"[lower] Used p-bits: {len(energy_syms)}")

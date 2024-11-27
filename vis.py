@@ -20,9 +20,9 @@ def gen_vis(args):
 
         valid_filter = valids[filter_idx]
 
-        _, ax1 = plt.subplots()
+        _, ax = plt.subplots()
 
-        ax1.scatter(
+        ax.scatter(
             idx[filter_idx],
             energies[filter_idx],
             color="gray",
@@ -30,7 +30,7 @@ def gen_vis(args):
             linewidth=0,
             zorder=1,
         )
-        ax1.scatter(
+        ax.scatter(
             idx[filter_idx][valid_filter],
             energies[filter_idx][valid_filter],
             label="valid",
@@ -40,10 +40,62 @@ def gen_vis(args):
             zorder=2,
         )
 
-        # ax1.set_ylim(-100, 4000)
+        """
+        # USE FOR CONV FIGURE (1.A)
 
-        ax1.set_xlabel("Iteration")
-        ax1.set_ylabel("Energy")
+        axins = ax.inset_axes(
+            [0.35, 0.35, 0.60, 0.60], xlim=(-100, 10000), ylim=(0, 4000)
+        )
+
+        axins.scatter(
+            idx[filter_idx],
+            energies[filter_idx],
+            color="gray",
+            s=4,
+            linewidth=0,
+            zorder=1,
+        )
+        axins.scatter(
+            idx[filter_idx][valid_filter],
+            energies[filter_idx][valid_filter],
+            label="valid",
+            color="tab:blue",
+            linewidth=0,
+            s=12,
+            zorder=2,
+        )
+        ax.indicate_inset_zoom(axins, edgecolor="black")
+        ax.set_ylim(-1000, 18000)
+        """
+
+        """
+        # USE FOR ENC FIGURE (1.B)
+
+        """
+        axins = ax.inset_axes([0.25, 0.25, 0.70, 0.70], xlim=(-50, 500), ylim=(-1, 80))
+
+        axins.scatter(
+            idx[filter_idx],
+            energies[filter_idx],
+            color="gray",
+            s=4,
+            linewidth=0,
+            zorder=1,
+        )
+        axins.scatter(
+            idx[filter_idx][valid_filter],
+            energies[filter_idx][valid_filter],
+            label="valid",
+            color="tab:blue",
+            linewidth=0,
+            s=12,
+            zorder=2,
+        )
+        # ax.indicate_inset_zoom(axins, edgecolor="black")
+        ax.set_ylim(-1000, 18000)
+
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Energy")
         plt.savefig(plot_file.with_suffix("." + args.filetype), dpi=400)
         plt.clf()
 

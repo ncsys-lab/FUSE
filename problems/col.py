@@ -30,12 +30,11 @@ class ColConvEfn(ConvEfn):
         )
 
         invalid_expr = (self.n) * ((1 - (spins * chi).sum(axis=-1)) ** 2).sum()
-        energy_expr = invalid_expr + cost_expr
 
         self.weights = weights
         self.chi = chi
 
-        return energy_expr, spins.flatten()
+        return invalid_expr, cost_expr, spins.flatten()
 
     def compile(self, inst):
         weights, chi, _ = inst

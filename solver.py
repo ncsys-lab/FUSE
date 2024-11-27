@@ -64,7 +64,7 @@ def run(key, long, iters, prob, efn, betas):
                 energy=energy,
                 state=jnp.astype(state, int),
             )
-        rand = jax.random.uniform(subkey, shape=p)
+        rand = jax.random.uniform(subkey)
         pos = (jax.nn.sigmoid(-betas[i] * grad) - rand > 0).flatten()
         new_state = jnp.where(mask, pos, state)
         return key, new_state, energy, valid
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-lr",
         "--log_rate",
-        default=0.1,
+        default=0.001,
         type=float,
         help="Proportion of logs to keep",
     )

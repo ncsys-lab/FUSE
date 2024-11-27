@@ -15,6 +15,7 @@ class StpConvEfn(ConvEfn):
         self.t = t
         self.maxval = maxval
         super().__init__()
+        self.sparse = True
 
     def _gen_exprs(self):
         N = self.n

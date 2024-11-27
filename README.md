@@ -10,42 +10,8 @@ If using [Docker](https://www.docker.com), you can spin up a container with all 
 This will drop you in a bash instance ready to run FUSE.
 
 Alternatively, you can also use a virtual environment and install dependencies via  `pip install -r requirements.txt`. We have tested FUSE on Python3.11.
-
-## Replicating Experiments
-### Table IV
-You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.
-|Name|Problem|Runtime (HH:MM:SS)|
-|--|--|--|
-|col|Graph Coloring|00:03:57|
-|tsp|Traveling Salesman|00:06:37|
-|iso|Graph Isomorphism|00:16:44|
-|knp|Knapsack|00:07:37|
-|stp|Steiner Tree|-|
-|Total||-|
-
-### Table V
-You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy function scaling experiments detailed in Table V (CtS and ESP numbers), or `scripts/run_t5_scale_quick.sh` to queue up all experiments. To get all the data (CtS, ESP, and solution quality metrics), run `scripts/run_{prob}_scale_long.sh` (or `scripts/run_t5_scale_long.sh` to queue up all experiments). These experiments do not exit early and thus runtimes can be long.
-|Name|Quick Runtime (HH:MM)|Long Runtime (HH:MM)|
-|--|--|--|
-|col|-|-|
-|tsp|-|-|
-|iso|-|-|
-|knp|-|-|
-|stp|-|-|
-|Total||-|
-
-### Table VI
-You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selection network to a size Log(N) selection network detailed in Table VI.
-|Name|Runtime (HH:MM:SS)|
-|--|--|
-|col|00:03:59|
-
-## Usage
-The main command is `solver.py`:
-```
-python3 solver.py [-h] [-t TRIALS] [-l] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
-```
-There are many options, explained in detail later. To run a simple Traveling Salesman Problem example over 8 cities with a conventional quadratic energy function, run the following command:
+## Kick-the-Tires Phase
+To run a simple Traveling Salesman Problem example over 8 cities with a conventional quadratic energy function, run the following command:
 ```
 python3 solver.py -o tsp -n 8
 ```
@@ -85,7 +51,53 @@ Sol qual(%): 0.27
 ```
 The encoded energy function takes 25 cycles to find a solution as good as the approximation, and takes 1717 cycles to find its best solution, which is also 27% better than the approximate solution.
 
-### Options for FUSE
+
+
+## Replicating Experiments
+### Table IV
+You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.
+|Name|Problem|Runtime (HH:MM:SS)|
+|--|--|--|
+|col|Graph Coloring|00:03:57|
+|tsp|Traveling Salesman|00:06:37|
+|iso|Graph Isomorphism|00:16:44|
+|knp|Knapsack|00:07:37|
+|stp|Steiner Tree|-|
+|Total||-|
+
+### Table V
+You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy function scaling experiments detailed in Table V (CtS and ESP numbers), or `scripts/run_t5_scale_quick.sh` to queue up all experiments. To get all the data (CtS, ESP, and solution quality metrics), run `scripts/run_{prob}_scale_long.sh` (or `scripts/run_t5_scale_long.sh` to queue up all experiments). These experiments do not exit early and thus runtimes can be long.
+|Name|Quick Runtime (HH:MM)|Long Runtime (HH:MM)|
+|--|--|--|
+|col|-|-|
+|tsp|-|-|
+|iso|-|-|
+|knp|-|-|
+|stp|-|-|
+|Total||-|
+
+### Table VI
+You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selection network to a size Log(N) selection network detailed in Table VI.
+|Name|Runtime (HH:MM:SS)|
+|--|--|
+|col|00:03:59|
+
+
+### Table VII
+You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function
+|Name|Runtime (HH:MM:SS)|
+|--|--|
+||00:03:59|
+
+## Replicating Figures
+You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function
+
+## General FUSE Usage
+The main command is `solver.py`:
+```
+python3 solver.py [-h] [-t TRIALS] [-l] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
+```
+There are many options, explained in detail later. ### Options for FUSE
 ```
 -h, --help            show help message and exit
 -o, --overwrite       Overwrite existing log directory, if it exists (will error otherwise)

@@ -36,13 +36,12 @@ class KnpConvEfn(ConvEfn):
         cweight_expr = np.dot(w_spins, vals)
 
         invalid_expr = self.c_maxval * self.n * (weight_expr - cweight_expr) ** 2
-        energy_expr = invalid_expr + cost_expr
 
         self.costs = costs
         self.weights = weights
 
         out_spins = np.hstack((spins, w_spins))
-        return energy_expr, out_spins
+        return invalid_expr, cost_expr, out_spins
 
     def compile(self, inst):
         weights, costs = inst

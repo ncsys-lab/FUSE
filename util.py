@@ -6,7 +6,7 @@ def print_run_stats(long, iters, esp, esp_10, cts, qual, cyc):
     qual = np.array(qual)
     cyc = np.array(cyc)
 
-    cts[np.where(cts == -1)] = iters
+    cts[cts == -1] = iters
 
     cts_q1, cts_med, cts_q3 = np.quantile(cts, [0.25, 0.5, 0.75])
     qual_q1, qual_med, qual_q3 = np.quantile(qual, [0.25, 0.5, 0.75])
