@@ -29,11 +29,9 @@ class IsoConvEfn(ConvEfn):
         g2_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
         invalid_expr = (self.n) * (se.Add(g1_once, g2_once))
 
-        energy_expr = invalid_expr + cost_expr
-
         self.g1 = g1_mat.flatten()
         self.g2 = g2_mat.flatten()
-        return energy_expr, spins.flatten()
+        return invalid_expr, cost_expr, spins.flatten()
 
     def compile(self, inst):
         g1, g2 = inst

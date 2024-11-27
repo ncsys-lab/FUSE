@@ -14,6 +14,7 @@ class TspConvEfn(ConvEfn):
         self.n = n
         self.maxval = maxval
         super().__init__()
+        self.sparse = True
 
     def _gen_exprs(self):
         spins = np.array(se.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
@@ -30,13 +31,35 @@ class TspConvEfn(ConvEfn):
         time_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
         invalid_expr = (self.n * self.maxval) * (se.Add(location_once, time_once))
 
-        energy_expr = invalid_expr + cost_expr
+        # energy_expr = invalid_expr + cost_expr
 
         self.weights = weights
-        return energy_expr, spins.flatten()
+
+        def valid_fn(spins, inst):
+            spins = spins.reshape(self.n, self.n)
+            location_once = ((1 - spins.sum(axis=0)) ** 2).sum()
+            time_once = ((1 - spins.sum(axis=1)) ** 2).sum()
+            return (self.n * self.maxval) * (location_once + time_once)
+
+        def cost_fn(spins, inst):
+            spins = spins.reshape(self.n, self.n)
+            M = spins.T
+            M_p = jnp.roll(M, -1, axis=1).T
+
+            X = M @ M_p
+            V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
+            return jnp.dot(V, inst)
+
+        self.valid_fn = valid_fn
+        self.cost_fn = cost_fn
+
+        return invalid_expr, cost_expr, spins.flatten()
 
     def compile(self, inst):
-        sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
+        if self.sparse:
+            sub_dict = inst
+        else:
+            sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
         return super().compile(sub_dict)
 
 

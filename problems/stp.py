@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import symengine as se
+import sympy
 
 from circuit import PermuteNet
 
@@ -15,6 +16,7 @@ class StpConvEfn(ConvEfn):
         self.t = t
         self.maxval = maxval
         super().__init__()
+        self.sparse = True
 
     def _gen_exprs(self):
         N = self.n
@@ -36,6 +38,11 @@ class StpConvEfn(ConvEfn):
             (v_depth.flatten(), v_sel, e_sel, e_depth[off_diag].flatten())
         )
 
+        self.dispatch_idx = [
+            N * max_vd,
+            N * max_vd + N - T,
+            N * max_vd + N - T + combos,
+        ]
         cost_expr = np.dot(e_sel, weights)
 
         one_root = (1 - v_depth[:, 0].sum()) ** 2
@@ -57,14 +64,44 @@ class StpConvEfn(ConvEfn):
             se.Add(one_root, one_depth, one_depth_edge, edge_lower, edge_depth_adj)
         )
 
-        energy_expr = invalid_expr + cost_expr
-
         self.weights = weights
-        return energy_expr, spins.flatten()
+
+        def valid_fn(spins, inst):
+            v_depth, v_sel, e_sel, pre_depth = self.dispatch_fn(spins)
+            v_depth = v_depth.reshape(N, max_vd)
+            e_depth = jnp.zeros((N, N, max_ed))
+            e_depth = e_depth.at[off_diag].set(pre_depth.reshape((-1, max_ed)))
+
+            one_root = (1 - v_depth[:, 0].sum()) ** 2
+            cond_depth = jnp.hstack((jnp.ones(T, dtype=int), v_sel))
+            one_depth = ((cond_depth - v_depth.sum(axis=-1)) ** 2).sum()
+
+            one_depth_edge = (
+                (e_sel - (e_depth[idx] + e_depth.swapaxes(0, 1)[idx]).sum(axis=-1)) ** 2
+            ).sum()
+
+            masked_depth = e_depth.swapaxes(0, 1)[off_diag].reshape(N, N - 1, max_ed)
+            edge_lower = ((v_depth[:, 1:] - masked_depth.sum(axis=1)) ** 2).sum()
+
+            edge_depth_adj = (
+                e_depth * (2 - v_depth[:, :-1][:, jnp.newaxis] - v_depth[:, 1:])
+            )[off_diag].sum()
+
+            return (self.n * self.maxval) * (
+                one_root + one_depth + one_depth_edge + edge_lower + edge_depth_adj
+            )
+
+        def cost_fn(spins, inst):
+            _, _, e_sel, _ = self.dispatch_fn(spins)
+            return jnp.dot(e_sel, inst)
+
+        self.valid_fn = valid_fn
+        self.cost_fn = cost_fn
+        return invalid_expr, cost_expr, spins.flatten()
 
     def compile(self, inst):
-        sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
-        return super().compile(sub_dict)
+        # sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
+        return super().compile(inst)
 
 
 class StpEncEfn(EncEfn):

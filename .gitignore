@@ -1,4 +1,6 @@
-venv/
-log/
+.venv/
+logs/
+plots/
+*runs/
 .DS_Store
 *__pycache__*
