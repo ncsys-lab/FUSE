@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import symengine as se
 
 from circuit import SelectNet
 
@@ -16,32 +15,26 @@ FUSE_COLOR = False
 class ColConvEfn(ConvEfn):
     def __init__(self, n):
         self.n = n
-        self.chi = []
         super().__init__()
 
-    def _gen_exprs(self):
-        spins = np.array(se.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
-        chi = np.array(se.symbols(f"x:{self.n}"))
-        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
+    def _gen_funcs(self):
+        def valid_fn(spins, _):
+            spins = spins.reshape((self.n, -1))
+            one_color = ((1 - spins.sum(axis=-1)) ** 2).sum()
+            adjust_derivs = (spins * (spins - 1)).sum()
+            return (self.n) * (one_color - adjust_derivs)
 
-        idx1, idx2 = np.triu_indices_from(spins, k=1)
-        cost_expr = se.Add(
-            *(weights[:, np.newaxis] * chi * spins[idx1] * spins[idx2]).flatten()
-        )
+        def cost_fn(spins, inst):
+            spins = spins.reshape((self.n, -1))
+            idx1, idx2 = jnp.triu_indices(self.n, k=1)
+            return (inst[:, jnp.newaxis] * spins[idx1] * spins[idx2]).sum()
 
-        invalid_expr = (self.n) * ((1 - (spins * chi).sum(axis=-1)) ** 2).sum()
-
-        self.weights = weights
-        self.chi = chi
-
-        return invalid_expr, cost_expr, spins.flatten()
+        return valid_fn, cost_fn, None
 
     def compile(self, inst):
         weights, chi, _ = inst
-        weight_dict = {weight: inst_w for weight, inst_w in zip(self.weights, weights)}
-        chi_dict = {self.chi[j]: 1 if j < chi else 0 for j in range(self.n)}
-        sub_dict = {**weight_dict, **chi_dict}
-        return super().compile(sub_dict)
+        self.spins = self.n * chi
+        return super().compile(weights)
 
 
 class ColEncEfn(EncEfn):

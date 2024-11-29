@@ -1,7 +1,7 @@
 import jax
+import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import symengine as se
 
 from .prob import ConvEfn, Prob
 
@@ -11,22 +11,19 @@ class CutConvEfn(ConvEfn):
         self.n = n
         super().__init__()
 
-    def _gen_exprs(self):
-        spins = np.array(se.symbols(f"s:{self.n}"))[:, np.newaxis]
-        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
+    def _gen_funcs(self):
+        def valid_fn(spins, inst):
+            return 0.0
 
-        n_spins = 1 - spins
-        edge_mat = spins @ n_spins.T + n_spins @ spins.T
-        energy_expr = np.dot(
-            -weights, edge_mat[np.triu_indices_from(edge_mat, k=1)].flatten()
-        )
+        def cost_fn(spins, inst):
+            spins = spins[:, jnp.newaxis]
+            n_spins = 1 - spins
+            edge_mat = spins @ n_spins.T + n_spins @ spins.T
+            return jnp.dot(
+                -inst, edge_mat[jnp.triu_indices_from(edge_mat, k=1)].flatten()
+            )
 
-        self.weights = weights
-        return energy_expr, spins.flatten()
-
-    def compile(self, inst):
-        sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
-        return super().compile(sub_dict)
+        return valid_fn, cost_fn, self.n
 
 
 class Cut(Prob):
@@ -47,8 +44,12 @@ class Cut(Prob):
     def sol_inst(self, prob_inst):
         adj_mat = np.zeros(shape=(self.n, self.n))
         adj_mat[np.triu_indices_from(adj_mat, k=1)] = prob_inst
+        adj_mat += adj_mat.T
         g = nx.from_numpy_array(adj_mat)
-        weight, _ = nx.approximation.one_exchange(g)
+        weight, assign = nx.approximation.one_exchange(g)
+        print(assign)
+        print(adj_mat)
+        print(weight)
         return -weight
 
     @staticmethod
