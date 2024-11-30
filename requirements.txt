@@ -1,3 +1,4 @@
+amaranth==0.5.3
 antlr4-python3-runtime==4.10
 anyio==4.6.2.post1
 certifi==2024.8.30
@@ -17,12 +18,15 @@ ioplace_parser==0.3.0
 jax==0.4.31
 jaxlib==0.4.31
 jaxtyping==0.2.33
+Jinja2==3.1.4
+jschon==0.11.1
 kiwisolver==1.4.5
 klayout==0.29.8
 knapsack==0.1.1
 libparse==0.3.1
 lxml==5.3.0
 markdown-it-py==3.0.0
+MarkupSafe==3.0.2
 matplotlib==3.9.2
 mdurl==0.1.2
 ml-dtypes==0.4.0
@@ -42,8 +46,10 @@ psutil==6.1.0
 Pygments==2.18.0
 pyparsing==3.1.4
 python-dateutil==2.9.0.post0
+pyvcd==0.4.1
 PyYAML==6.0.2
 RapidFuzz==3.10.1
+rfc3986==2.0.0
 rich==13.9.4
 scipy==1.14.0
 six==1.16.0
