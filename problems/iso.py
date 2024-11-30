@@ -31,6 +31,7 @@ class IsoConvEfn(ConvEfn):
 
 class IsoEncEfn(EncEfn):
     def __init__(self, n):
+        super().__init__()
         self.n = n
         net = PermuteNet(n)
         self.permutefn = net.circuitfn()

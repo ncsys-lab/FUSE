@@ -1,7 +1,10 @@
+import amaranth as am
 import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from amaranth.lib import wiring
+from amaranth.lib.wiring import In, Out
 
 from circuit import PermuteNet
 
@@ -35,12 +38,14 @@ class TspConvEfn(ConvEfn):
         return valid_fn, cost_fn, self.n * self.n
 
 
-class TspEncEfn(EncEfn):
+class TspEncEfn(EncEfn, wiring.Component):
     def __init__(self, n):
         self.n = n
-        net = PermuteNet(n)
-        self.permutefn = net.circuitfn()
-        self.spins = net.n_spins
+        self.net = PermuteNet(n)
+        self.permutefn = self.net.circuitfn()
+        self.spins = self.net.n_spins
+
+        super().__init__({"state": In(self.spins), "outputs": Out(n * (n - 1) // 2)})
 
         @jax.jit
         def circuitfn(state):
@@ -53,6 +58,27 @@ class TspEncEfn(EncEfn):
             return V
 
         self.circuitfn = circuitfn
+
+    def elaborate(self, _) -> am.Module:
+        n = self.n
+
+        m = am.Module()
+        m.submodules += self.net
+        out_mat = am.Signal(am.unsigned(n * n))
+        m.d.comb += self.net.state.eq(self.state)
+        m.d.comb += out_mat.eq(self.net.outputs)
+
+        bit = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                out_signal = am.Const(0, 1)
+                for k in range(n):
+                    kp = (k + 1) % n
+                    out_signal |= out_mat[k * n + i] & out_mat[kp * n + j]
+                    out_signal |= out_mat[kp * n + i] & out_mat[k * n + j]
+                m.d.comb += self.outputs[bit].eq(out_signal)
+                bit += 1
+        return m
 
     def compile(self, inst):
         return super().compile(inst, self.circuitfn)

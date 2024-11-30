@@ -5,6 +5,9 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from amaranth.back import verilog
+from amaranth.lib import wiring
+from amaranth.lib.wiring import In, Out
 
 epsilon = 0.0001
 
@@ -74,15 +77,22 @@ class ConvEfn(Efn):
         pass
 
 
-class EncEfn(Efn):
-    def __init__(self):
+class EncEfn(Efn, wiring.Component):
+    def __init__(self, wire_dict={}):
         print("[compile] Encocded Energy Function! Nothing to generate...")
-        self.spins = 0
+        wiring.Component.__init__(self, wire_dict)
+
+        if wire_dict:
+            self.pbit_shape = wire_dict["state"].shape
+            self.output_shape = wire_dict["outputs"].shape
 
     def gen_circuit(self, dir):
+        with open(f"{dir}/src/enc_circuit.v", "w+") as f:
+            f.write(verilog.convert(self, name="enc_circuit"))
+
         with open(f"{dir}/src/params.v", "w+") as f:
-            f.write(f"localparam PBITS = {self.spins};\n")
-            f.write(f"localparam OUTPUTS = {self.outputs};\n")
+            f.write(f"localparam PBITS = {self.pbit_shape};\n")
+            f.write(f"localparam OUTPUTS = {self.output_shape};\n")
 
     def compile(self, weights, circuitfn, masks=None, vcircuitfn=None):
         if masks is None:

@@ -1,10 +1,13 @@
 import math
 
+import amaranth as am
 import jax
 import jax.numpy as jnp
+from amaranth.lib import wiring
+from amaranth.lib.wiring import In, Out
 
 
-class PermuteNet:
+class PermuteNet(wiring.Component):
     def __init__(self, n):
         self.n = n
         self.swaps = []
@@ -30,6 +33,14 @@ class PermuteNet:
         self.jcomps = jnp.array([(y, x) for x, y in self.swaps], dtype=int)
         self.jswaps = jnp.array(self.swaps, dtype=int)
 
+        # Verilog
+        super().__init__(
+            {
+                "state": In(self.n_spins),
+                "outputs": Out(self.n * self.n),
+            }
+        )
+
     def circuitfn(self):
         @jax.jit
         def out_fn(spins):
@@ -44,6 +55,25 @@ class PermuteNet:
             return jax.lax.fori_loop(0, self.n_spins, swap, state)
 
         return out_fn
+
+    def elaborate(self, _) -> am.Module:
+        m = am.Module()
+
+        frontier = [am.Const(1 << i) for i in range(self.n)]
+
+        for i, swap in enumerate(self.swaps):
+            j = swap[0]
+            k = swap[1]
+            sig_0 = am.Signal(self.n)
+            sig_1 = am.Signal(self.n)
+            m.d.comb += sig_0.eq(am.Mux(self.state[i], frontier[k], frontier[j]))
+            m.d.comb += sig_1.eq(am.Mux(self.state[i], frontier[j], frontier[k]))
+            frontier[j] = sig_0
+            frontier[k] = sig_1
+
+        for i, signal in enumerate(frontier):
+            m.d.comb += self.outputs[i * self.n : (i + 1) * self.n].eq(signal)
+        return m
 
 
 # N replicas of selecting b/w K items

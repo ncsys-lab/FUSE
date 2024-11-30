@@ -1,5 +1,5 @@
 # Basics
-DESIGN_NAME: fuse
+DESIGN_NAME: enc
 VERILOG_FILES: dir::src/*.v
 
 meta:
