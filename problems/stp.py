@@ -2,10 +2,6 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import symengine as se
-import sympy
-
-from circuit import PermuteNet
 
 from .prob import ConvEfn, EncEfn, Prob
 
@@ -16,58 +12,37 @@ class StpConvEfn(ConvEfn):
         self.t = t
         self.maxval = maxval
         super().__init__()
-        self.sparse = True
+        self.sparse = False
 
-    def _gen_exprs(self):
+    def _gen_funcs(self):
         N = self.n
         T = self.t
         max_vd = N // 2 + 1
         max_ed = N // 2
         combos = N * (N - 1) // 2
 
-        v_depth = np.array(se.symbols(f"vd:{N * max_vd}")).reshape(N, max_vd)
-        v_sel = np.array(se.symbols(f"v:{N - T}"))
-        e_sel = np.array(se.symbols(f"e:{combos}"))
-        e_depth = np.array(se.symbols(f"ed:{N * N * max_ed}")).reshape(N, N, max_ed)
-        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
+        idx = jnp.triu_indices(N, k=1)
+        off_diag = ~jnp.eye(N, dtype=bool)
 
-        idx = np.triu_indices(N, k=1)
-        off_diag = ~np.eye(N, dtype=bool)
-
-        spins = np.hstack(
-            (v_depth.flatten(), v_sel, e_sel, e_depth[off_diag].flatten())
-        )
-
-        self.dispatch_idx = [
-            N * max_vd,
-            N * max_vd + N - T,
-            N * max_vd + N - T + combos,
-        ]
-        cost_expr = np.dot(e_sel, weights)
-
-        one_root = (1 - v_depth[:, 0].sum()) ** 2
-        cond_depth = np.hstack((np.ones(T, dtype=int), v_sel))
-        one_depth = ((cond_depth - v_depth.sum(axis=-1)) ** 2).sum()
-
-        one_depth_edge = (
-            (e_sel - (e_depth[idx] + e_depth.swapaxes(0, 1)[idx]).sum(axis=-1)) ** 2
-        ).sum()
-
-        masked_depth = e_depth.swapaxes(0, 1)[off_diag].reshape(N, N - 1, max_ed)
-        edge_lower = ((v_depth[:, 1:] - masked_depth.sum(axis=1)) ** 2).sum()
-
-        edge_depth_adj = (
-            e_depth * (2 - v_depth[:, :-1][:, np.newaxis] - v_depth[:, 1:])
-        )[off_diag].sum()
-
-        invalid_expr = (N * self.maxval) * (
-            se.Add(one_root, one_depth, one_depth_edge, edge_lower, edge_depth_adj)
-        )
-
-        self.weights = weights
+        @jax.jit
+        def dispatch_fn(spins):
+            dispatch_idx = [
+                N * max_vd,
+                N * max_vd + N - T,
+                N * max_vd + N - T + combos,
+            ]
+            return jnp.split(spins, dispatch_idx)
 
         def valid_fn(spins, inst):
-            v_depth, v_sel, e_sel, pre_depth = self.dispatch_fn(spins)
+            v_depth, v_sel, e_sel, pre_depth = dispatch_fn(spins)
+
+            adjust_derivs = (
+                (2 * v_depth * (v_depth - 1)).sum()
+                + (v_sel * (v_sel - 1)).sum()
+                + (e_sel * (e_sel - 1)).sum()
+                + (2 * pre_depth * (pre_depth - 1)).sum()
+            )
+
             v_depth = v_depth.reshape(N, max_vd)
             e_depth = jnp.zeros((N, N, max_ed))
             e_depth = e_depth.at[off_diag].set(pre_depth.reshape((-1, max_ed)))
@@ -86,22 +61,21 @@ class StpConvEfn(ConvEfn):
             edge_depth_adj = (
                 e_depth * (2 - v_depth[:, :-1][:, jnp.newaxis] - v_depth[:, 1:])
             )[off_diag].sum()
-
             return (self.n * self.maxval) * (
-                one_root + one_depth + one_depth_edge + edge_lower + edge_depth_adj
+                one_root
+                + one_depth
+                + one_depth_edge
+                + edge_lower
+                + edge_depth_adj
+                - adjust_derivs
             )
 
         def cost_fn(spins, inst):
-            _, _, e_sel, _ = self.dispatch_fn(spins)
+            _, _, e_sel, _ = dispatch_fn(spins)
             return jnp.dot(e_sel, inst)
 
-        self.valid_fn = valid_fn
-        self.cost_fn = cost_fn
-        return invalid_expr, cost_expr, spins.flatten()
-
-    def compile(self, inst):
-        # sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
-        return super().compile(inst)
+        n_spins = N * max_vd + N - T + combos + N * (N - 1) * max_ed
+        return valid_fn, cost_fn, n_spins
 
 
 class StpEncEfn(EncEfn):

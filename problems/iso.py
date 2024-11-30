@@ -1,8 +1,6 @@
 import jax
 import jax.numpy as jnp
-import networkx as nx
 import numpy as np
-import symengine as se
 
 from circuit import PermuteNet
 
@@ -14,38 +12,29 @@ class IsoConvEfn(ConvEfn):
         self.n = n
         super().__init__()
 
-    def _gen_exprs(self):
-        combos = self.n * self.n
-        spins = np.array(se.symbols(f"s:{combos}")).reshape((self.n, self.n))
-        g1_mat = np.array(se.symbols(f"a:{combos}")).reshape((self.n, self.n))
-        g2_mat = np.array(se.symbols(f"b:{combos}")).reshape((self.n, self.n))
+    def _gen_funcs(self):
+        def valid_fn(spins, inst):
+            spins = spins.reshape(self.n, self.n)
+            g1_once = ((1 - spins.sum(axis=0)) ** 2).sum()
+            g2_once = ((1 - spins.sum(axis=1)) ** 2).sum()
+            adjust_derivs = 2 * (spins * (spins - 1)).sum()
+            return (self.n) * (g1_once + g2_once - adjust_derivs)
 
-        g2_p = spins @ g1_mat @ spins.T
-        cost_expr = (
-            (g2_mat) * (se.sympify(1) - g2_p) + g2_p * (se.sympify(1) - g2_mat)
-        ).sum()
+        def cost_fn(spins, inst):
+            spins = spins.reshape(self.n, self.n)
+            g1_mat, g2_mat = inst
+            g2_p = spins @ g1_mat @ spins.T
+            return ((g2_mat) * (1 - g2_p) + g2_p * (1 - g2_mat)).sum()
 
-        g1_once = ((se.sympify(1) - spins.sum(axis=0)) ** 2).sum()
-        g2_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
-        invalid_expr = (self.n) * (se.Add(g1_once, g2_once))
-
-        self.g1 = g1_mat.flatten()
-        self.g2 = g2_mat.flatten()
-        return invalid_expr, cost_expr, spins.flatten()
-
-    def compile(self, inst):
-        g1, g2 = inst
-        g1_dict = {edge_v: edge for edge_v, edge in zip(self.g1, g1.flatten().tolist())}
-        g2_dict = {edge_v: edge for edge_v, edge in zip(self.g2, g2.flatten().tolist())}
-        sub_dict = {**g1_dict, **g2_dict}
-
-        return super().compile(sub_dict)
+        return valid_fn, cost_fn, self.n * self.n
 
 
 class IsoEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
-        self.spins, self.permutefn = PermuteNet(self.n)
+        net = PermuteNet(n)
+        self.permutefn = net.circuitfn()
+        self.spins = net.n_spins
 
     def compile(self, inst):
         g1_mat, g2_mat = inst

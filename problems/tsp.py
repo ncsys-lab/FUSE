@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import symengine as se
 
 from circuit import PermuteNet
 
@@ -13,33 +12,16 @@ class TspConvEfn(ConvEfn):
     def __init__(self, n, maxval):
         self.n = n
         self.maxval = maxval
+        self.pbits = 4 * n - 3
         super().__init__()
-        self.sparse = True
 
-    def _gen_exprs(self):
-        spins = np.array(se.symbols(f"s:{self.n*self.n}")).reshape((self.n, self.n))
-        weights = np.array(se.symbols(f"w:{self.n*(self.n-1)//2}"))
-
-        M = spins.T
-        M_p = np.roll(M, -1, axis=1).T
-
-        X = M @ M_p
-        V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
-
-        cost_expr = np.dot(V, weights)
-        location_once = ((se.sympify(1) - spins.sum(axis=0)) ** 2).sum()
-        time_once = ((se.sympify(1) - spins.sum(axis=1)) ** 2).sum()
-        invalid_expr = (self.n * self.maxval) * (se.Add(location_once, time_once))
-
-        # energy_expr = invalid_expr + cost_expr
-
-        self.weights = weights
-
+    def _gen_funcs(self):
         def valid_fn(spins, inst):
             spins = spins.reshape(self.n, self.n)
             location_once = ((1 - spins.sum(axis=0)) ** 2).sum()
             time_once = ((1 - spins.sum(axis=1)) ** 2).sum()
-            return (self.n * self.maxval) * (location_once + time_once)
+            adjust_derivs = 2 * (spins * (spins - 1)).sum()
+            return (self.n * self.maxval) * (location_once + time_once - adjust_derivs)
 
         def cost_fn(spins, inst):
             spins = spins.reshape(self.n, self.n)
@@ -50,23 +32,15 @@ class TspConvEfn(ConvEfn):
             V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
             return jnp.dot(V, inst)
 
-        self.valid_fn = valid_fn
-        self.cost_fn = cost_fn
-
-        return invalid_expr, cost_expr, spins.flatten()
-
-    def compile(self, inst):
-        if self.sparse:
-            sub_dict = inst
-        else:
-            sub_dict = {weight: inst_w for weight, inst_w in zip(self.weights, inst)}
-        return super().compile(sub_dict)
+        return valid_fn, cost_fn, self.n * self.n
 
 
 class TspEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
-        self.spins, self.permutefn = PermuteNet(self.n)
+        net = PermuteNet(n)
+        self.permutefn = net.circuitfn()
+        self.spins = net.n_spins
 
         @jax.jit
         def circuitfn(state):

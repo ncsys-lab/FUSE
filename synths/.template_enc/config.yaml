@@ -1,0 +1,18 @@
+# Basics
+DESIGN_NAME: fuse
+VERILOG_FILES: dir::src/*.v
+
+meta:
+  version: 2
+  flow:
+    - Yosys.Synthesis
+    - OpenROAD.STAPrePNR
+
+# Technology-Specific Configs
+pdk::sky130*:
+  FP_CORE_UTIL: 45
+  CLOCK_PERIOD: 0.0
+  scl::sky130_fd_sc_hs:
+    CLOCK_PERIOD: 0
+  scl::sky130_fd_sc_ls:
+    MAX_FANOUT_CONSTRAINT: 5

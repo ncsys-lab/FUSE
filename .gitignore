@@ -1,6 +1,8 @@
 .venv/
 logs/
 plots/
+synths/*
+!synths/.*/
 *runs/
 .DS_Store
 *__pycache__*

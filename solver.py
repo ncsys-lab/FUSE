@@ -52,36 +52,36 @@ def run(key, long, iters, prob, efn, betas):
     key, run_key = jax.random.split(key)
 
     rand = jax.random.uniform(run_key, shape=(iters,))
-    # key, subkey = jax.random.split(key)
     x = jnp.arange(iters)
 
-    def inner_loop(key, i, state):
+    def inner_loop(i, state):
         mask = masks[i % n_masks]
         energy, valid, grad = engradfn(state, mask)
         if DEBUG:
             jax.debug.print(
-                "{i}:\tEnergy: {energy}\t, State: {state}",
+                "{i}:\tEnergy: {energy}\t, State: {state}\t, Grad: {grad}",
                 i=i,
                 energy=energy,
                 state=jnp.astype(state, int),
+                grad=grad,
             )
-        pos = (jax.nn.sigmoid(-betas[i] * grad) - rand[i] > 1).flatten()
+        pos = ((jax.nn.sigmoid(-betas[i] * grad) - rand[i]) > 0).flatten()
         new_state = jnp.where(mask, pos, state)
-        return key, new_state, energy, valid
+        return new_state, energy, valid
 
     if not long:
 
         def while_inner(val):
-            (i, key, state, energy, valid) = val
-            key, new_state, energy, valid = inner_loop(key, i, state)
-            return (i + 1, key, new_state, energy, valid)
+            (i, state, energy, valid) = val
+            new_state, energy, valid = inner_loop(i, state)
+            return (i + 1, new_state, energy, valid)
 
         def cond_fun(val):
-            (i, _, _, energy, _) = val
+            (i, _, energy, _) = val
             return (i == 0) + (energy > prob_sol) * (i < iters)
 
-        init_pargs = (jnp.int64(0), run_key, state, jnp.float64(0.0), False)
-        (i, _, state, energy, _) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
+        init_pargs = (jnp.int64(0), state, jnp.float64(0.0), False)
+        (i, state, energy, _) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
         min_energy = energy
         sol_cyc = i
         succ = energy <= prob_sol
@@ -91,13 +91,11 @@ def run(key, long, iters, prob, efn, betas):
 
     else:
 
-        def for_inner(pargs, i):
-            (key, state) = pargs
-            key, new_state, energy, valid = inner_loop(key, i, state)
-            return (key, new_state), (state, energy, valid)
+        def for_inner(state, i):
+            new_state, energy, valid = inner_loop(i, state)
+            return (new_state), (state, energy, valid)
 
-        init_pargs = (run_key, state)
-        _, trace = jax.lax.scan(for_inner, init_pargs, x, iters)
+        _, trace = jax.lax.scan(for_inner, state, x, iters)
 
         _, energies, _ = trace
         min_energy = jnp.min(energies)
@@ -196,7 +194,7 @@ def parse(inparser, subparser):
     prob_parsers = {prob.gen_parser(subparser): prob for prob in probs}
     args = inparser.parse_args()
     if args.problem not in prob_parsers:
-        raise Exception("unknown subparser <%s>" % args.problem)
+        raise Exception("Problem <%s> not found!" % args.problem)
     return prob_parsers[args.problem], args
 
 

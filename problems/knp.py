@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import knapsack as knap_solver
 import numpy as np
 import symengine as se
+from jax._src import dispatch
 
 from .prob import ConvEfn, EncEfn, Prob
 
@@ -18,37 +19,39 @@ class KnpConvEfn(ConvEfn):
 
     # Costs = higher is better
     # Weights = lower is better
-    def _gen_exprs(self):
-        spins = np.array(se.symbols(f"s:{self.n}"))
-        costs = np.array(se.symbols(f"c:{self.n}"))
-        weights = np.array(se.symbols(f"w:{self.n}"))
-
+    def _gen_funcs(self):
         cap = int(self.cap) + 1
         m = floor(log2(cap))
         vals = [1 << i for i in range(m)]
         vals.append(cap - (1 << m))
+        vals = jnp.asarray(vals)
 
-        w_spins = np.array(se.symbols(f"ws:{len(vals)}"))
-        vals = np.array(vals)
+        n_spins = len(vals) + self.n
 
-        cost_expr = -np.dot(spins, costs)
-        weight_expr = np.dot(spins, weights)
-        cweight_expr = np.dot(w_spins, vals)
+        @jax.jit
+        def dispatch_fn(spins):
+            return jnp.split(spins, [self.n])
 
-        invalid_expr = self.c_maxval * self.n * (weight_expr - cweight_expr) ** 2
+        def valid_fn(spins, inst):
+            spins, w_spins = dispatch_fn(spins)
+            weights, _ = inst
+            weight_expr = jnp.dot(spins, weights)
+            cweight_expr = jnp.dot(w_spins, vals)
+            adjust_derivs = jnp.dot(weights * weights, spins * (spins - 1)) + jnp.dot(
+                vals * vals, w_spins * (w_spins - 1)
+            )
+            return (
+                self.c_maxval
+                * self.n
+                * ((weight_expr - cweight_expr) ** 2 - adjust_derivs)
+            )
 
-        self.costs = costs
-        self.weights = weights
+        def cost_fn(spins, inst):
+            spins, _ = dispatch_fn(spins)
+            _, costs = inst
+            return -jnp.dot(spins, costs)
 
-        out_spins = np.hstack((spins, w_spins))
-        return invalid_expr, cost_expr, out_spins
-
-    def compile(self, inst):
-        weights, costs = inst
-        weight_dict = {weight: inst_w for weight, inst_w in zip(self.weights, weights)}
-        cost_dict = {cost: inst_c for cost, inst_c in zip(self.costs, costs)}
-        sub_dict = {**weight_dict, **cost_dict}
-        return super().compile(sub_dict)
+        return valid_fn, cost_fn, n_spins
 
 
 class KnpEncEfn(EncEfn):
