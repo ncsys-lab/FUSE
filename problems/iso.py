@@ -13,7 +13,7 @@ class IsoConvEfn(ConvEfn):
         super().__init__()
 
     def _gen_funcs(self):
-        def valid_fn(spins, _):
+        def valid_fn(spins, inst):
             spins = spins.reshape(self.n, self.n)
             g1_once = ((1 - spins.sum(axis=0)) ** 2).sum()
             g2_once = ((1 - spins.sum(axis=1)) ** 2).sum()
@@ -32,7 +32,9 @@ class IsoConvEfn(ConvEfn):
 class IsoEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
-        self.spins, self.permutefn = PermuteNet(self.n)
+        net = PermuteNet(n)
+        self.permutefn = net.circuitfn()
+        self.spins = net.n_spins
 
     def compile(self, inst):
         g1_mat, g2_mat = inst

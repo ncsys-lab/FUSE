@@ -27,13 +27,18 @@ class ConvEfn(Efn):
         print("[generate] Generating energy functions...")
         self.valid_fn, self.cost_fn, self.spins = self._gen_funcs()
 
+    def gen_circuit(self, dir):
+        with open(f"{dir}/src/params.v", "w+") as f:
+            f.write(f"localparam PBITS = {self.pbits};\n")
+
     def compile(self, inst):
         valid_fn = jax.jit(ft.partial(self.valid_fn, inst=inst))
         cost_fn = jax.jit(ft.partial(self.cost_fn, inst=inst))
+
         Jv = jax.hessian(valid_fn)(jnp.zeros(shape=(self.spins,)))
         Jc = jax.hessian(cost_fn)(jnp.zeros(shape=(self.spins,)))
         J = Jv + Jc
-        print(jnp.diagonal(J))
+
         assert jnp.all(
             jnp.abs(jnp.diagonal(J)) < epsilon
         ), "Diagonal Entries of Hessian must be 0!"
@@ -74,11 +79,17 @@ class EncEfn(Efn):
         print("[compile] Encocded Energy Function! Nothing to generate...")
         self.spins = 0
 
+    def gen_circuit(self, dir):
+        with open(f"{dir}/src/params.v", "w+") as f:
+            f.write(f"localparam PBITS = {self.spins};\n")
+            f.write(f"localparam OUTPUTS = {self.outputs};\n")
+
     def compile(self, weights, circuitfn, masks=None, vcircuitfn=None):
         if masks is None:
 
             @jax.jit
             def engradfn(state, mask):
+                state = state.astype(bool)
                 z_state = jnp.where(mask, 0, state)
                 o_state = jnp.where(mask, 1, state)
 

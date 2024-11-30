@@ -18,7 +18,7 @@ class ColConvEfn(ConvEfn):
         super().__init__()
 
     def _gen_funcs(self):
-        def valid_fn(spins, _):
+        def valid_fn(spins, inst):
             spins = spins.reshape((self.n, -1))
             one_color = ((1 - spins.sum(axis=-1)) ** 2).sum()
             adjust_derivs = (spins * (spins - 1)).sum()
@@ -46,7 +46,10 @@ class ColEncEfn(EncEfn):
         n = self.n
 
         weights, chi, color_dict = inst
-        self.spins, self.selectfn = SelectNet(n, chi)
+
+        net = SelectNet(n, chi)
+        self.selectfn = net.circuitfn()
+        self.spins = net.n_spins
 
         nspins = chi - 1
 

@@ -12,10 +12,11 @@ class TspConvEfn(ConvEfn):
     def __init__(self, n, maxval):
         self.n = n
         self.maxval = maxval
+        self.pbits = 4 * n - 3
         super().__init__()
 
     def _gen_funcs(self):
-        def valid_fn(spins, _):
+        def valid_fn(spins, inst):
             spins = spins.reshape(self.n, self.n)
             location_once = ((1 - spins.sum(axis=0)) ** 2).sum()
             time_once = ((1 - spins.sum(axis=1)) ** 2).sum()
@@ -37,7 +38,9 @@ class TspConvEfn(ConvEfn):
 class TspEncEfn(EncEfn):
     def __init__(self, n):
         self.n = n
-        self.spins, self.permutefn = PermuteNet(self.n)
+        net = PermuteNet(n)
+        self.permutefn = net.circuitfn()
+        self.spins = net.n_spins
 
         @jax.jit
         def circuitfn(state):
