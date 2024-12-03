@@ -1,1 +1,1 @@
-docker build -t fuse .
+docker build  -t fuse .

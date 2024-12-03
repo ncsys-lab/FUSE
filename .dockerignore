@@ -8,7 +8,10 @@
 **/__pycache__
 **/.venv
 **/venv
-**/log/*
+**/logs/*
+**/plots/*
+**/synths/*
+!**/synths/.*/
 **/.classpath
 **/.dockerignore
 **/.env

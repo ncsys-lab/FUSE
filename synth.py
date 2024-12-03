@@ -18,14 +18,11 @@ def synthesize(Prob, args):
     efn.gen_circuit(synth_dir)
 
     # call openlane
-    openlane_args = [
-        "openlane",
-        "--dockerized",
-        "--run-tag",
-        tag,
-        f"{synth_dir}/config.yaml",
-    ]
-    subprocess.run(openlane_args, check=True)
+    openlane_cmd = (
+        f"nix-shell --command 'openlane --run-tag {tag} ../{synth_dir}/config.yaml'"
+    )
+
+    subprocess.run(openlane_cmd, shell=True, check=True, cwd="openlane2")
 
     # extract metrics
     with open(f"{synth_dir}/runs/{tag}/final/metrics.json", "r") as f:

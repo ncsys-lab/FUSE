@@ -1,0 +1,3 @@
+[submodule "openlane2"]
+	path = openlane2
+	url = https://github.com/efabless/openlane2

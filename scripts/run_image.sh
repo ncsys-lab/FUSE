@@ -1,1 +1,1 @@
-docker run -v ./log:/fuse/log -it fuse
+docker run -v ./:/fuse/ -it fuse
