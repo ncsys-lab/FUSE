@@ -2,57 +2,84 @@
 This is the implementation for the tool described in Efficient Optimization with Encoded Energy Functions (HPCA 2025, link pending). It allows one to define problems and various energy function mappings for those problems, along with a p-computing simulator.
 
 ## Installation
-If using [Docker](https://www.docker.com), you can spin up a container with all the dependencies installed after cloning the repo (may need to `chmod +x` the files):
-```
-./build_image.sh
-./run_image.sh
-```
-This will drop you in a bash instance ready to run FUSE.
+First, clone the repo:
 
-Alternatively, you can also use a virtual environment and install dependencies via  `pip install -r requirements.txt`. We have tested FUSE on Python3.11.
+```
+git clone --recurse-submodules https://github.com/ncsys-lab/FUSE.git
+```
+The supported way to use FUSE is through [Docker](https://www.docker.com). You can spin up a container with all the dependencies installed after cloning the repo:
+```
+# Will take about 5 mins to install of synthesis tools
+./scripts/build_image.sh
+./scripts/run_image.sh
+```
+This will drop you in a bash instance ready to run FUSE. The repo will be mounted in the container, so you can make changes to the source in your editor of choice and they will be reflected.
+
+Alternatively, you can also use a virtual environment and install dependencies via  `pip install -r requirements.txt`. You will also need to build [OpenLane2](https://openlane2.readthedocs.io/en/latest/getting_started/common/nix_installation/index.html). We have tested FUSE on Python3.11.
 ## Kick-the-Tires Phase
 To run a simple Traveling Salesman Problem example over 8 cities with a conventional quadratic energy function, run the following command:
 ```
-python3 solver.py -o tsp -n 8
+python3 solver.py -s 1234 tsp -n 8
 ```
 This should return the following output:
 ```
-[generate] Generating energy function...
-[generate] Calculating symbolic gradients...
-[compile] Compile time was 0.19
+[generate] Generating energy functions...
+[compile] Compile time was 0.00
 [lower] Lowering to p-computer...
 [lower] Used p-bits: 64
-[lower] Depedent colors: 16
-[lower] Lowering time was 0.76
+[lower] Dependent colors: 16
+[lower] Lowering time was 0.88
 [run] Beginning execution...
-[run] Done! Runtime was 1.37
+[run] Done! Runtime was 0.28
 ==== RUN STATS ====
-CtS: 28573
-Best Cycle: 52184
-Sol qual(%): 0.27
+CtS: 2002
+Best Cycle: 2002
+Sol qual(%): 0.00
 ```
-FUSE prints out some data about the compilation and lowering process and then begins execution. We see that the p-computer was able to find the approximate solution in 28573 cycles, and that the best proposed solution was found at cycle 52184 and was 27% better than the approximate solution.
+FUSE prints out some data about the compilation and lowering process and then begins execution. We see that the p-computer was able to find the approximate solution in 2002 cycles, and that this solution is equivalent in quality to the approximate solution.
 
 To run the same problem using an encoded energy function, add the `-f` flag:
 ```
-python3 solver.py -o -f tsp -n 8
+python3 solver.py -s 1234 -f tsp -n 8
 ```
 This returns the following output:
 ```
+[generate] Encocded Energy Function! Nothing to generate...
 [compile] Compile time was 0.00
 [lower] Lowering to p-computer...
 [lower] Lowering time was 0.00
 [run] Beginning execution...
-[run] Done! Runtime was 1.51
+[run] Done! Runtime was 0.31
 ==== RUN STATS ====
-CtS: 25
-Best Cycle: 1717
-Sol qual(%): 0.27
+CtS: 67
+Best Cycle: 67
+Sol qual(%): 0.04
 ```
-The encoded energy function takes 25 cycles to find a solution as good as the approximation, and takes 1717 cycles to find its best solution, which is also 27% better than the approximate solution.
+The encoded energy function takes 67 cycles to find a solution at least as good as the approximation, in this case 4% better than the approximate solution.
 
-
-
+We can compare the area and latency of these circuits by synthesizing them. To synthesize the conventional energy function, run (note that the first synthesis run will take longer as the PDK must be downloaded):
+```
+python3 synth.py tsp -n 8
+```
+This will create a directory `synths/tsp_n8_conv`, copy relevant verilog files, and invoke OpenLane2 to run synthesis. This should yield the following output:
+```
+...(previous OpenLane output)
+====SYNTHESIS RESULTS====
+Area (um^2): 46380.73
+Latency (ns): 22.39
+```
+Run synthesis of the encoded energy function to test verilog emmission:
+```
+python3 synth.py -f tsp -n 8
+```
+This produces the following output:
+```
+...(previous OpenLane output)
+====SYNTHESIS RESULTS====
+Area (um^2): 77608.18
+Latency (ns): 24.49
+```
+If these tests pass, your FUSE installation should be good to go.
 ## Replicating Experiments
 ### Table IV
 You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.

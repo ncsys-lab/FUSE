@@ -79,7 +79,7 @@ class ConvEfn(Efn):
 
 class EncEfn(Efn, wiring.Component):
     def __init__(self, wire_dict={}):
-        print("[compile] Encocded Energy Function! Nothing to generate...")
+        print("[generate] Encocded Energy Function! Nothing to generate...")
         wiring.Component.__init__(self, wire_dict)
 
         if wire_dict:
