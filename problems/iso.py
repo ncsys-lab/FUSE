@@ -44,7 +44,7 @@ class IsoEncEfn(EncEfn):
         def circuitfn(state):
             p = self.permutefn(state)
             g2_p = p @ g1_mat @ p.T
-            diff = g2_p * (1 - g2_mat) + (1 - g2_p) * (g2_mat)
+            diff = (g2_p * (1 - g2_mat)) + ((1 - g2_p) * (g2_mat))
             return diff.sum()
 
         weights = 1
@@ -64,13 +64,11 @@ class Iso(Prob):
         combos = self.n * (self.n - 1) // 2
         keys = jax.random.split(key, num=3)
 
-        edges = np.asarray(
-            jax.random.bernoulli(keys[0], p=self.nu, shape=combos)
-        ).astype(int)
+        edges = np.asarray(jax.random.bernoulli(keys[0], p=self.nu, shape=combos))
 
-        g1_mat = np.zeros((self.n, self.n), dtype=int)
+        g1_mat = np.zeros((self.n, self.n), dtype=bool)
         g1_mat[np.triu_indices(self.n, k=1)] = edges
-        g1_mat += g1_mat.T
+        g1_mat |= g1_mat.T
 
         perm_mat = jax.random.permutation(keys[1], jnp.eye(self.n, dtype=int))
         g2_mat = perm_mat @ g1_mat @ perm_mat.T

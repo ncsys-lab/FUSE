@@ -17,6 +17,7 @@ from problems.col import Col
 from problems.cut import Cut
 from problems.iso import Iso
 from problems.knp import Knp
+from problems.prob import EncEfn
 from problems.stp import Stp
 from problems.tsp import Tsp
 from util import print_run_stats
@@ -51,7 +52,8 @@ def run(key, iters, qualiters, prob, efn, betas):
     p = masks[0].shape[0]
 
     key, state_key = jax.random.split(key)
-    state = jax.random.bernoulli(state_key, shape=p).astype(float)
+    state_type = bool if isinstance(efn, EncEfn) else float
+    state = jax.random.bernoulli(state_key, shape=p).astype(state_type)
 
     total_iters = iters + qualiters
     key, run_key = jax.random.split(key)
@@ -203,7 +205,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FUSE Simulator")
     parser.add_argument("-t", "--trials", type=int, help="Number of trials")
     parser.add_argument(
-        "-x", "--threads", type=int, default=6, help="Number of threads to use"
+        "-x", "--threads", type=int, default=10, help="Number of threads to use"
     )
     parser.add_argument(
         "-i",

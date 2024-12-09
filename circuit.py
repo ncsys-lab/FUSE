@@ -1,4 +1,5 @@
 import math
+from functools import partial
 
 import amaranth as am
 import jax
@@ -44,6 +45,7 @@ class PermuteNet(wiring.Component):
     def circuitfn(self):
         @jax.jit
         def out_fn(spins):
+            @partial(jax.jit, donate_argnums=(1,))
             def swap(i, state):
                 return state.at[self.jswaps[i]].set(
                     jax.lax.select(
@@ -107,6 +109,7 @@ class SelectNet:
     def circuitfn(self):
         @jax.jit
         def out_fn(spins):
+            @partial(jax.jit, donate_argnums=(1,))
             def swap(i, state):
                 return state.at[self.jswaps[i]].set(
                     jax.lax.select(
@@ -114,7 +117,7 @@ class SelectNet:
                     )
                 )
 
-            state = jnp.eye(self.n)
+            state = jnp.eye(self.n, dtype=bool)
             out = jax.lax.fori_loop(0, self.k - 1, swap, state)
             return out[0]
 

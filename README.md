@@ -85,39 +85,38 @@ If these tests pass, your FUSE installation should be good to go.
 After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots are manually overlaid to create the figures 1A and 1B.
 
 ### Table IV
-You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU. The Steiner tree benchmarks take especially long - we have included the
-|Name|Problem|Runtime (HH:MM:SS)|
+You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The runtimes for conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.
+|Name|Problem|Runtime (HH:MM)|
 |--|--|--|
-|col|Graph Coloring|00:03:57|
-|tsp|Traveling Salesman|00:06:37|
-|iso|Graph Isomorphism|00:16:44|
-|knp|Knapsack|00:07:37|
-|stp|Steiner Tree|-|
-|Total||-|
+|tsp|Traveling Salesman|00:06|
+|iso|Graph Isomorphism|00:16|
+|col|Graph Coloring|00:03|
+|knp|Knapsack|00:07|
+|stp|Steiner Tree|~27:00 (~08:50 on 32-thread machine)|
+|Total||27:32|
 
 ### Table V
-You can use `scripts/run_{prob}_scale.sh` to run the encoded energy function scaling experiments detailed in Table V.
-|Name|Quick Runtime (HH:MM)|Long Runtime (HH:MM)|
+You can use `scripts/run_t5_exps.sh` to run the encoded energy function scaling experiments detailed in Table V.
+|Name|Runtime (HH:MM)|
 |--|--|--|
-|col|-|-|
-|tsp|-|-|
-|iso|-|-|
-|knp|-|-|
-|stp|-|-|
-|Total||-|
+|tsp|00:13|
+|iso|00:40|
+|col|00:22|
+|knp|00:11|
+|stp|01:29|
+|Total|03:00|
 
 ### Table VI
 You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selection network to a size Log(N) selection network detailed in Table VI.
-|Name|Runtime (HH:MM:SS)|
+|Name|Runtime (HH:MM)|
 |--|--|
-|col|00:03:59|
-
+|col|00:05|
 
 ### Table VII
 You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function. These scripts will print out the latency and total area of the modules. For the hierarchical breakdown of the area for encoded circuits, one will need to find
-|Name|Runtime (HH:MM:SS)|
+|Name|Runtime (HH:MM)|
 |--|--|
-||00:03:59|
+|synth|00:03|
 
 
 ## General FUSE Usage

@@ -53,11 +53,12 @@ class ColEncEfn(EncEfn):
 
         nspins = chi - 1
 
+        idx1, idx2 = jnp.triu_indices(n, k=1)
+
         @jax.jit
         def circuitfn(spins):
             col_mat = self.selectfn(spins.reshape(n, nspins))
-            idx1, idx2 = jnp.triu_indices(n, k=1)
-            return (col_mat[idx1] * col_mat[idx2]).sum(axis=-1)
+            return (col_mat[idx1] & col_mat[idx2]).sum(axis=-1)
 
         if FUSE_COLOR:
             adjs = np.zeros((n, n, nspins, nspins))

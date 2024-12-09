@@ -49,6 +49,8 @@ class TspEncEfn(EncEfn, wiring.Component):
 
         super().__init__({"state": In(self.spins), "outputs": Out(n * (n - 1) // 2)})
 
+        u_idx = jnp.triu_indices(self.n, k=1)
+
         @jax.jit
         def circuitfn(state):
             spins = self.permutefn(state)
@@ -56,8 +58,7 @@ class TspEncEfn(EncEfn, wiring.Component):
             M_p = jnp.roll(M, -1, axis=1).T
 
             X = M @ M_p
-            V = (X + X.T)[jnp.triu_indices_from(X, k=1)].flatten()
-            return V
+            return (X + X.T)[u_idx].flatten()
 
         self.circuitfn = circuitfn
 

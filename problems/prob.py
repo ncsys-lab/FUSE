@@ -105,9 +105,8 @@ class EncEfn(Efn, wiring.Component):
 
             @jax.jit
             def engradfn(state, mask):
-                state = state.astype(bool)
-                z_state = jnp.where(mask, 0, state)
-                o_state = jnp.where(mask, 1, state)
+                z_state = jnp.where(mask, False, state)
+                o_state = jnp.where(mask, True, state)
 
                 z_energy = jnp.dot(weights, circuitfn(z_state)).astype("float64")
                 o_energy = jnp.dot(weights, circuitfn(o_state)).astype("float64")
@@ -115,7 +114,7 @@ class EncEfn(Efn, wiring.Component):
                 energy = jax.lax.select(jnp.dot(mask, state), o_energy, z_energy)
                 return energy, True, o_energy - z_energy
 
-            masks = jnp.asarray(np.eye(self.spins, dtype=np.bool_))
+            masks = jnp.asarray(np.eye(self.spins, dtype=bool))
 
         else:
 
