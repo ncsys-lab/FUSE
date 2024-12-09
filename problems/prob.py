@@ -8,6 +8,7 @@ import numpy as np
 from amaranth.back import verilog
 from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
+from scipy.sparse import csr_matrix
 
 epsilon = 0.0001
 
@@ -29,6 +30,7 @@ class ConvEfn(Efn):
     def __init__(self):
         print("[generate] Generating energy functions...")
         self.valid_fn, self.cost_fn, self.spins = self._gen_funcs()
+        self.sparse = False
 
     def gen_circuit(self, dir):
         with open(f"{dir}/src/params.v", "w+") as f:
@@ -46,23 +48,27 @@ class ConvEfn(Efn):
             jnp.abs(jnp.diagonal(J)) < epsilon
         ), "Diagonal Entries of Hessian must be 0!"
 
+        valid_vgrad_fn = jax.value_and_grad(valid_fn)
+        cost_vgrad_fn = jax.value_and_grad(cost_fn)
+
         @jax.jit
         def engradfn(x, _):
-            valid, grad_v = jax.value_and_grad(valid_fn)(x)
-            cost, grad_c = jax.value_and_grad(cost_fn)(x)
+            valid, grad_v = valid_vgrad_fn(x)
+            cost, grad_c = cost_vgrad_fn(x)
 
             energy = valid + cost
             grad = grad_c + grad_v
             return (energy, (valid < epsilon), grad)
 
-        dep_graph = nx.from_numpy_array(J)
+        print(f"[lower] Used p-bits: {self.spins}")
+        J_mat = csr_matrix(J) if self.sparse else J
+        dep_graph = nx.from_numpy_array(J_mat)
         color_dict = nx.greedy_color(dep_graph)
         colors = np.fromiter(
             [color_dict[spin] for spin in range(self.spins)], dtype=int
         )
 
         ncolors = max(colors) + 1
-        print(f"[lower] Used p-bits: {self.spins}")
         print(f"[lower] Dependent colors: {ncolors}")
 
         masks = np.zeros((ncolors, self.spins), dtype=np.bool_)

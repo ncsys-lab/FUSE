@@ -19,15 +19,8 @@ class Logger:
 
     def log(self, run_key, res):
         prob_sol, succ, cts, sol_qual, trace = res
-        if trace is not None:
-            states, energies, valids = trace
-            states = states[self.log_idx]
-            energies = energies[self.log_idx]
-            valids = valids[self.log_idx]
-        else:
-            states = []
-            energies = []
-            valids = []
+        energies = trace[0][self.log_idx]
+        valids = trace[1][self.log_idx]
 
         key0, key1 = jax.random.key_data(run_key)
         log_file = f"{self.log_dir}/0x{key0:08X}_{key1:08X}.log"
@@ -40,7 +33,6 @@ class Logger:
             cts=cts,
             sol_qual=sol_qual[0],
             sol_cyc=sol_qual[1],
-            states=states,
             energies=energies,
             valids=valids,
         )
@@ -50,8 +42,9 @@ class Logger:
         return jnp.load(log_file)
 
     @staticmethod
-    def get_plot_file(log_file):
+    def get_plot_file(log_file, name=None):
         plot_path = Path(log_file.replace("logs", "plots"))
-        plot_file = plot_path.parent.joinpath(plot_path.stem)
+        filename = name if name is not None else plot_path.stem
+        plot_file = plot_path.parent.joinpath(filename)
         plot_file.parent.mkdir(parents=True, exist_ok=True)
         return plot_file

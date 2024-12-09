@@ -12,7 +12,7 @@ class StpConvEfn(ConvEfn):
         self.t = t
         self.maxval = maxval
         super().__init__()
-        self.sparse = False
+        self.sparse = True
 
     def _gen_funcs(self):
         N = self.n
@@ -102,17 +102,15 @@ class StpEncEfn(EncEfn):
             ind_nodes = np.append(term_nodes, st_nodes[state.astype(bool)])
             ind_g = nx.induced_subgraph(g, ind_nodes)
             edges = nx.minimum_spanning_tree(ind_g, algorithm="prim").edges
-            view = nx.subgraph_view(g, filter_edge=lambda u, v: (u, v) in edges)
-            out = nx.to_numpy_array(view, weight=None)[
-                np.triu_indices(self.n, k=1)
-            ].astype(np.int16)
-            return out
+            adj = np.zeros((self.n, self.n), dtype=bool)
+            adj[tuple(np.array(edges).T)] = True
+            return adj[np.triu_indices(self.n, k=1)]
 
         @jax.jit
         def circuitfn(state):
             return jax.pure_callback(
                 mst_callback,
-                jax.ShapeDtypeStruct((self.n * (self.n - 1) // 2,), dtype="int16"),
+                jax.ShapeDtypeStruct((self.n * (self.n - 1) // 2,), dtype="bool"),
                 state,
             )
 

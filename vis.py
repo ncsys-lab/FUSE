@@ -9,7 +9,7 @@ from log import Logger
 def gen_vis(args):
     for log in args.logs:
         log_data = Logger.load_log(log)
-        plot_file = Logger.get_plot_file(log)
+        plot_file = Logger.get_plot_file(log, name=args.name)
         idx = log_data["idx"]
         energies = log_data["energies"]
         valids = log_data["valids"]
@@ -105,6 +105,15 @@ if __name__ == "__main__":
     parser.add_argument("logs", type=str, nargs="+", help="Logfiles to analyze")
     parser.add_argument(
         "-ft", "--filetype", type=str, default="png", help="Filetype for plot"
+    )
+    parser.add_argument(
+        "-n", "--name", type=str, default=None, help="Name for plot file"
+    )
+    parser.add_argument(
+        "-ylim", "--ylimit", type=int, nargs=2, default=[], help="Y-limits for plot"
+    )
+    parser.add_argument(
+        "-xlim", "--xlimit", type=int, nargs="2", default=[], help="X-limits for plot"
     )
     args = parser.parse_args()
     gen_vis(args)

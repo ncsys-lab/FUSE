@@ -80,9 +80,12 @@ Area (um^2): 77608.18
 Latency (ns): 24.49
 ```
 If these tests pass, your FUSE installation should be good to go.
-## Replicating Experiments
+## Replicating Key Results
+### Replicating Figures
+After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots are manually overlaid to create the figures 1A and 1B.
+
 ### Table IV
-You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU.
+You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. We report the runtimes for each experiment on a consumer-grade laptop CPU. The Steiner tree benchmarks take especially long - we have included the
 |Name|Problem|Runtime (HH:MM:SS)|
 |--|--|--|
 |col|Graph Coloring|00:03:57|
@@ -93,7 +96,7 @@ You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional ener
 |Total||-|
 
 ### Table V
-You can use `scripts/run_{prob}_scale_quick.sh` to run the encoded energy function scaling experiments detailed in Table V (CtS and ESP numbers), or `scripts/run_t5_scale_quick.sh` to queue up all experiments. To get all the data (CtS, ESP, and solution quality metrics), run `scripts/run_{prob}_scale_long.sh` (or `scripts/run_t5_scale_long.sh` to queue up all experiments). These experiments do not exit early and thus runtimes can be long.
+You can use `scripts/run_{prob}_scale.sh` to run the encoded energy function scaling experiments detailed in Table V.
 |Name|Quick Runtime (HH:MM)|Long Runtime (HH:MM)|
 |--|--|--|
 |col|-|-|
@@ -111,13 +114,11 @@ You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selec
 
 
 ### Table VII
-You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function
+You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function. These scripts will print out the latency and total area of the modules. For the hierarchical breakdown of the area for encoded circuits, one will need to find
 |Name|Runtime (HH:MM:SS)|
 |--|--|
 ||00:03:59|
 
-## Replicating Figures
-You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function
 
 ## General FUSE Usage
 The main command is `solver.py`:

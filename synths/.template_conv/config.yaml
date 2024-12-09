@@ -1,6 +1,7 @@
 # Basics
 DESIGN_NAME: conv
 VERILOG_FILES: dir::src/*.v
+SYNTH_NO_FLAT: True
 
 meta:
   version: 2

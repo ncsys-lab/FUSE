@@ -7,6 +7,8 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 import multiprocess.context as ctx
+from jax._src.state import primitives as state_primitives
+from jax._src.state.utils import val_to_ref_aval
 from pathos.multiprocessing import ProcessingPool as Pool
 from tqdm import tqdm
 
@@ -24,13 +26,15 @@ jax.config.update("jax_platform_name", "cpu")
 jax.config.update("jax_enable_x64", True)
 DEBUG = False
 
+ref_set = state_primitives.ref_set
+
 
 def mute():
     sys.stdout = open(os.devnull, "w")
     pass
 
 
-def run(key, long, iters, prob, efn, betas):
+def run(key, iters, qualiters, prob, efn, betas):
     key, prob_key = jax.random.split(key)
     prob_inst = prob.gen_inst(prob_key)
     prob_sol = prob.sol_inst(prob_inst)
@@ -44,17 +48,27 @@ def run(key, long, iters, prob, efn, betas):
     print("[run] Beginning execution...")
     start_time = time.perf_counter()
     n_masks = len(masks)
-    p = masks[0].shape
+    p = masks[0].shape[0]
 
     key, state_key = jax.random.split(key)
     state = jax.random.bernoulli(state_key, shape=p).astype(float)
 
+    total_iters = iters + qualiters
     key, run_key = jax.random.split(key)
 
-    rand = jax.random.uniform(run_key, shape=(iters,))
-    x = jnp.arange(iters)
+    def inner_loop(args):
+        (
+            i,
+            j,
+            q,
+            sol_f_or_iter,
+            key,
+            state,
+            # states,
+            energies,
+            valids,
+        ) = args
 
-    def inner_loop(i, state):
         mask = masks[i % n_masks]
         energy, valid, grad = engradfn(state, mask)
         if DEBUG:
@@ -65,45 +79,38 @@ def run(key, long, iters, prob, efn, betas):
                 state=jnp.astype(state, int),
                 grad=grad,
             )
-        pos = ((jax.nn.sigmoid(-betas[i] * grad) - rand[i]) > 0).flatten()
+
+        key, sub_key = jax.random.split(key)
+        rand = jax.random.uniform(sub_key, shape=(p,))
+        pos = ((jax.nn.sigmoid(-betas[j] * grad) - rand) > 0).flatten()
         new_state = jnp.where(mask, pos, state)
-        return new_state, energy, valid
 
-    if not long:
+        j += 1 - sol_f_or_iter
+        q += sol_f_or_iter
+        sol_f_or_iter = sol_f_or_iter | (energy <= prob_sol) | (i >= iters)
+        energies = energies.at[i].set(energy)
+        valids = valids.at[i].set(valid)
 
-        def while_inner(val):
-            (i, state, energy, valid) = val
-            new_state, energy, valid = inner_loop(i, state)
-            return (i + 1, new_state, energy, valid)
+        args = (i + 1, j, q, sol_f_or_iter, key, new_state, energies, valids)
+        return args
 
-        def cond_fun(val):
-            (i, _, energy, _) = val
-            return (i == 0) + (energy > prob_sol) * (i < iters)
+    def cond_fun(args):
+        (i, _, q, _, _, _, _, _) = args
+        return (q <= qualiters) & (i < (iters + qualiters))
 
-        init_pargs = (jnp.int64(0), state, jnp.float64(0.0), False)
-        (i, state, energy, _) = jax.lax.while_loop(cond_fun, while_inner, init_pargs)
-        min_energy = energy
-        sol_cyc = i
-        succ = energy <= prob_sol
-        succ_10 = i < iters // 10
-        trace = None
-        cts = i if succ else jnp.array([-1])
+    init_e = jnp.full((total_iters,), jnp.inf)
+    init_v = jnp.zeros((total_iters,), dtype=bool)
+    init_args = (0, 0, 0, False, run_key, state, init_e, init_v)
+    i, _, _, _, _, _, energies, valids = jax.lax.while_loop(
+        cond_fun, inner_loop, init_args
+    )
 
-    else:
-
-        def for_inner(state, i):
-            new_state, energy, valid = inner_loop(i, state)
-            return (new_state), (state, energy, valid)
-
-        _, trace = jax.lax.scan(for_inner, state, x, iters)
-
-        _, energies, _ = trace
-        min_energy = jnp.min(energies)
-        sol_cyc = jnp.argmin(energies)
-        gated = energies <= prob_sol
-        succ = jnp.sum(gated) > 0
-        succ_10 = jnp.sum(gated[: iters // 10]) > 0
-        cts = jnp.argmax(gated) if succ else jnp.array(-1)
+    min_energy = jnp.min(energies)
+    sol_cyc = jnp.argmin(energies)
+    gated = energies <= prob_sol
+    succ = jnp.sum(gated) > 0
+    succ_10 = jnp.sum(gated[: iters // 10]) > 0
+    cts = jnp.argmax(gated) if succ else jnp.array(-1)
 
     sol_qual = (
         (prob_sol - min_energy) / abs(prob_sol) if prob_sol != 0 else jnp.array(-1)
@@ -111,13 +118,7 @@ def run(key, long, iters, prob, efn, betas):
 
     runtime = time.perf_counter() - start_time
     print(f"[run] Done! Runtime was {runtime:0.2f}")
-    return (
-        prob_sol,
-        (succ, succ_10),
-        cts,
-        (sol_qual, sol_cyc),
-        trace,
-    )
+    return (prob_sol, (succ, succ_10), cts, (sol_qual, sol_cyc), (energies, valids))
 
 
 def execute(Prob, args):
@@ -137,7 +138,7 @@ def execute(Prob, args):
 
     if args.trials is None:
         key, run_key = jax.random.split(key)
-        res = run(run_key, args.long, args.iters, prob, efn, betas)
+        res = run(run_key, args.iters, args.qualiters, prob, efn, betas)
         _, succ, cts, sol_qual, _ = res
 
         logger.log(run_key, res)
@@ -164,8 +165,8 @@ def execute(Prob, args):
                 p.imap(
                     partial(
                         run,
-                        long=args.long,
                         iters=args.iters,
+                        qualiters=args.qualiters,
                         prob=prob,
                         efn=efn,
                         betas=betas,
@@ -186,7 +187,7 @@ def execute(Prob, args):
 
         esp = succs / args.trials
         esp_10 = succs_10 / args.trials
-        print_run_stats(args.long, args.iters, esp, esp_10, ctss, sol_quals, sol_cycs)
+        print_run_stats(args.iters, esp, esp_10, ctss, sol_quals, sol_cycs)
 
 
 def parse(inparser, subparser):
@@ -205,17 +206,18 @@ if __name__ == "__main__":
         "-x", "--threads", type=int, default=6, help="Number of threads to use"
     )
     parser.add_argument(
-        "-l",
-        "--long",
-        action="store_true",
-        help="Disable quick execution via early exiting",
-    )
-    parser.add_argument(
         "-i",
         "--iters",
         type=int,
         help="(Maximum) number of iterations",
         default=1000000,
+    )
+    parser.add_argument(
+        "-q",
+        "--qualiters",
+        type=int,
+        help="Extra iterations after approx solution is found",
+        default=0,
     )
     parser.add_argument("-s", "--seed", type=int, help="Random Seed", default=42)
     parser.add_argument(

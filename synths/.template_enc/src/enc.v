@@ -6,8 +6,6 @@ module enc #() (
 );
     `include "params.v"
 
-    //localparam OUTPUTS = (N*(N - 1)) >> 1;
-    //localparam PBITS = N * $clog2(N) - N + 1;
     localparam OUTPUT_ADDR_WIDTH = $clog2(OUTPUTS);
     localparam OUTPUT_SIZE = 1 << OUTPUT_ADDR_WIDTH;
 
@@ -32,19 +30,15 @@ module enc #() (
     assign o_state = state | index;
     assign z_state = state & ~index;
 
-    genvar i;
-    generate
-        for(i = 0; i < OUTPUTS; i = i + 1) begin
-            assign adder_in[i*32+:32] = (z_out[i] ^ o_out[i]) ? ((z_out[i]) ? W[i*32+:32]: -W[i*32+:32]):0;
-        end
-        for(i = OUTPUTS; i < OUTPUT_SIZE; i = i + 1) begin
-            assign adder_in[i*32+:32] = 0;
-        end
-    endgenerate
+    weight_mux #(.OUTPUTS(OUTPUTS), .OUTPUT_SIZE(OUTPUT_SIZE)) weight_mux_inst (
+        .z_out(z_out),
+        .o_out(o_out),
+        .W(W),
+        .adder_in(adder_in)
+    );
 
     adder_tree #( .N(OUTPUT_SIZE)) adder_inst (
         .inputs(adder_in),
         .out(out)
     );
-    // Output of the adder tree is the final inter-stage sum
 endmodule

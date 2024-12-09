@@ -1,3 +1,5 @@
+from functools import reduce
+
 import amaranth as am
 import jax
 import jax.numpy as jnp
@@ -71,12 +73,12 @@ class TspEncEfn(EncEfn, wiring.Component):
         bit = 0
         for i in range(n):
             for j in range(i + 1, n):
-                out_signal = am.Const(0, 1)
+                signals = []
                 for k in range(n):
                     kp = (k + 1) % n
-                    out_signal |= out_mat[k * n + i] & out_mat[kp * n + j]
-                    out_signal |= out_mat[kp * n + i] & out_mat[k * n + j]
-                m.d.comb += self.outputs[bit].eq(out_signal)
+                    signals.append(out_mat[k * n + i] & out_mat[kp * n + j])
+                    signals.append(out_mat[kp * n + i] & out_mat[k * n + j])
+                m.d.comb += self.outputs[bit].eq(reduce(lambda x, y: x | y, signals))
                 bit += 1
         return m
 
