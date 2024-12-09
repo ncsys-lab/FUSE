@@ -88,17 +88,17 @@ After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4
 You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The runtimes for conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.
 |Name|Problem|Runtime (HH:MM)|
 |--|--|--|
-|tsp|Traveling Salesman|00:06|
-|iso|Graph Isomorphism|00:16|
-|col|Graph Coloring|00:03|
-|knp|Knapsack|00:07|
-|stp|Steiner Tree|~27:00 (~08:50 on 32-thread machine)|
-|Total||27:32|
+|tsp|Traveling Salesman|00:13|
+|iso|Graph Isomorphism|00:11|
+|col|Graph Coloring|00:07|
+|knp|Knapsack|00:08|
+|stp|Steiner Tree|~27:00 (08:50 on 32-thread machine)|
+|Total||27:40|
 
 ### Table V
 You can use `scripts/run_t5_exps.sh` to run the encoded energy function scaling experiments detailed in Table V.
 |Name|Runtime (HH:MM)|
-|--|--|--|
+|--|--|
 |tsp|00:13|
 |iso|00:40|
 |col|00:22|
