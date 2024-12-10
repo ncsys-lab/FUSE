@@ -145,6 +145,7 @@ You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventio
 |Name|Runtime (HH:MM)|
 |--|--|
 |synth|00:03|
+
 Re-running the script will only print out results instead of re-running synthesis - this can make it easier to read the reports.
 
 ## General FUSE Usage
