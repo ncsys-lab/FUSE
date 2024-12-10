@@ -1,7 +1,7 @@
 # Basics
 DESIGN_NAME: enc
 VERILOG_FILES: dir::src/*.v
-#SYNTH_NO_FLAT: True
+SYNTH_NO_FLAT: True
 
 meta:
   version: 2

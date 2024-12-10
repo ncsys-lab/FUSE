@@ -86,7 +86,7 @@ If these tests pass, your FUSE installation should be good to go.
 After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. The script will place the These plots are manually overlaid to create the figures 1A and 1B.
 
 ### Table IV
-You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The runtimes for conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.
+You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.
 |Name|Problem|Runtime (HH:MM)|
 |--|--|--|
 |tsp|Traveling Salesman|00:13|
