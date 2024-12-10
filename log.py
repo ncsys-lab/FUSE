@@ -48,5 +48,5 @@ class Logger:
         else:
             plot_path = Path(log_file.replace("logs", "plots"))
             plot_file = plot_path.parent.joinpath(plot_path.stem)
-            plot_file.parent.mkdir(parents=True, exist_ok=True)
+        plot_file.parent.mkdir(parents=True, exist_ok=True)
         return plot_file

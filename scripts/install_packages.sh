@@ -11,6 +11,8 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix/
     extra-trusted-public-keys = openlane.cachix.org-1:qqdwh+QMNGmZAuyeQJTH9ErW57OWSvdtuwfBKdS254E=
 "
 
+mkdir plots
+
 . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 
 git clone https://github.com/efabless/openlane2

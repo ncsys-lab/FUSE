@@ -127,6 +127,7 @@ class Tsp(Prob):
         path = nx.approximation.christofides(g)
         # path = nx.approximation.simulated_annealing_tsp(g, "greedy")
         weight = sum(g[n][nbr]["weight"] for n, nbr in nx.utils.pairwise(path))
+        print(weight)
         return weight
 
     @staticmethod

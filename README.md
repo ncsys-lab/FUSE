@@ -66,8 +66,8 @@ This will create a directory `synths/tsp_n8_conv`, copy relevant verilog files, 
 ```
 ...(previous OpenLane output)
 ====SYNTHESIS RESULTS====
-Area (um^2): 46380.73
-Latency (ns): 22.39
+Area (um^2): 54709.97
+Latency (ns): 18.37
 ```
 Run synthesis of the encoded energy function to test verilog emmission:
 ```
@@ -77,10 +77,37 @@ This produces the following output:
 ```
 ...(previous OpenLane output)
 ====SYNTHESIS RESULTS====
-Area (um^2): 77608.18
-Latency (ns): 24.49
+Area (um^2): 84562.35
+Latency (ns): 20.09
 ```
 If these tests pass, your FUSE installation should be good to go.
+
+## Data Availability
+Due to the long runtimes of certain experiments, we have opted to include raw log files (which include data about success rates, CTS, and solution quality while holding a trace of 0.1% of visited state energies by default), which can be analyzed by the following script to generate the entries in Tables IV, V, and VI.
+
+To use the analysis script, first unzip the log files:
+```
+tar -xzvf exp_data.tar.gz
+```
+Then, one can output the statistics of a run using the following command (this is the 10 node graph coloring example from Table IV):
+```
+python3 analyze.py exp_data/table_iv/col/col_n10_conv_b0.00_0.00_lin_s42/*
+```
+For Table V experiments, please add `-i 5000000` to the command in order to reflect the higher number of iterations:
+```
+python3 analyze.py exp_data/table_v/stp_n100_enc_b0.00_3.75_lin_s42/* -i 5000000
+```
+## Setting Thread Count
+By default, FUSE is configured to use 10 threads. You should adjust the thread defaults to match your machine (file `solver.py`, line ~207):
+```
+parser.add_argument("-t", "--trials", type=int, help="Number of trials")
+parser.add_argument(
+    "-x", "--threads", type=int, default=10, help="Number of threads to use" # Modify this line
+)
+parser.add_argument(
+    "-i",
+```
+Ensure that you have enough memory (ideally ~1.5GB per core) to prevent OOM errors (You may have to adjust the container's limit in the Docker Desktop app).
 ## Replicating Key Results
 ### Replicating Figures
 After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. The script will place the These plots are manually overlaid to create the figures 1A and 1B.
@@ -114,18 +141,19 @@ You can use `scripts/run_t6_exps.sh` to run experiments comparing a size N selec
 |col|00:05|
 
 ### Table VII
-You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function. These scripts will print out the latency and total area of the modules. For the hierarchical breakdown of the area for encoded circuits, one will need to find
+You can use `scripts/run_t7_exps.sh` to run experiments synthesizing a conventional TSP circuit with an encoded energy function. These scripts will print out the latency and total area of the modules.
 |Name|Runtime (HH:MM)|
 |--|--|
 |synth|00:03|
-
+Re-running the script will only print out results instead of re-running synthesis - this can make it easier to read the reports.
 
 ## General FUSE Usage
+Note: No need to read further if you only want to replicate the above experiments. This section is intended for users who want to extend FUSE (e.g. by writing new problem definitions).
 The main command is `solver.py`:
 ```
 python3 solver.py [-h] [-t TRIALS] [-l] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
 ```
-There are many options, explained in detail later. ### Options for FUSE
+The options for the solver script are described here:
 ```
 -h, --help            show help message and exit
 -o, --overwrite       Overwrite existing log directory, if it exists (will error otherwise)

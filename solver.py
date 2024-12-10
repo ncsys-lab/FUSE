@@ -66,7 +66,6 @@ def run(key, iters, qualiters, prob, efn, betas):
             sol_f_or_iter,
             key,
             state,
-            # states,
             energies,
             valids,
         ) = args

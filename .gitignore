@@ -1,6 +1,7 @@
 .venv/
 logs/
 plots/
+exp_data/*
 synths/*
 !synths/.*/
 *runs/
