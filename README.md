@@ -6,6 +6,7 @@ First, clone the repo:
 
 ```
 git clone --recurse-submodules https://github.com/ncsys-lab/FUSE.git
+cd FUSE
 ```
 The supported way to use FUSE is through [Docker](https://www.docker.com). You can spin up a container with all the dependencies installed after cloning the repo:
 ```
@@ -19,7 +20,7 @@ Alternatively, you can also use a virtual environment and install dependencies v
 ## Kick-the-Tires Phase
 To run a simple Traveling Salesman Problem example over 8 cities with a conventional quadratic energy function, run the following command:
 ```
-python3 solver.py -s 1234 tsp -n 8
+python3 solver.py -be -1.5 -lr 0.1 tsp -n 8
 ```
 This should return the following output:
 ```
@@ -28,36 +29,36 @@ This should return the following output:
 [lower] Lowering to p-computer...
 [lower] Used p-bits: 64
 [lower] Dependent colors: 16
-[lower] Lowering time was 0.88
+[lower] Lowering time was 0.79
 [run] Beginning execution...
-[run] Done! Runtime was 0.28
+[run] Done! Runtime was 0.89
 ==== RUN STATS ====
-CtS: 2002
-Best Cycle: 2002
+CtS: 416963
+Best Cycle: 416963
 Sol qual(%): 0.00
 ```
-FUSE prints out some data about the compilation and lowering process and then begins execution. We see that the p-computer was able to find the approximate solution in 2002 cycles, and that this solution is equivalent in quality to the approximate solution.
+FUSE prints out some data about the compilation and lowering process and then begins execution. We see that the p-computer was able to find the approximate solution in 416 thousand cycles, and that this solution is equivalent in quality to the approximate solution.
 
-To run the same problem using an encoded energy function, add the `-f` flag:
+To run the same problem using an encoded energy function, run the following command (note the `-f` flag for encoded energy functions):
 ```
-python3 solver.py -s 1234 -f tsp -n 8
+python3 solver.py -be 2.5 -lr 0.1 -f tsp -n 8
 ```
 This returns the following output:
 ```
 [generate] Encocded Energy Function! Nothing to generate...
-[compile] Compile time was 0.00
+[compile] Compile time was 0.13
 [lower] Lowering to p-computer...
 [lower] Lowering time was 0.00
 [run] Beginning execution...
-[run] Done! Runtime was 0.31
+[run] Done! Runtime was 0.33
 ==== RUN STATS ====
-CtS: 67
-Best Cycle: 67
-Sol qual(%): 0.04
+CtS: 461
+Best Cycle: 461
+Sol qual(%): 0.00
 ```
-The encoded energy function takes 67 cycles to find a solution at least as good as the approximation, in this case 4% better than the approximate solution.
+The encoded energy function takes 461 cycles to find a solution as good as the approximation.
 
-We can compare the area and latency of these circuits by synthesizing them. To synthesize the conventional energy function, run (note that the first synthesis run will take longer as the PDK must be downloaded):
+We can compare the area and latency of these circuits by synthesizing them. To synthesize the conventional energy function, run the following command (note that the first synthesis run will take longer as the PDK must be downloaded):
 ```
 python3 synth.py tsp -n 8
 ```
@@ -82,7 +83,7 @@ Latency (ns): 24.49
 If these tests pass, your FUSE installation should be good to go.
 ## Replicating Key Results
 ### Replicating Figures
-After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots are manually overlaid to create the figures 1A and 1B.
+After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. The script will place the These plots are manually overlaid to create the figures 1A and 1B.
 
 ### Table IV
 You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The runtimes for conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.

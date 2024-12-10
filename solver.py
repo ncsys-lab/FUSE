@@ -229,7 +229,7 @@ if __name__ == "__main__":
         "-bi", "--beta_init", type=float, default=0.0, help="Initial Beta value"
     )
     parser.add_argument(
-        "-be", "--beta_end", type=float, default=1.0, help="Ending Beta value"
+        "-be", "--beta_end", type=float, default=0.0, help="Ending Beta value"
     )
     parser.add_argument(
         "-bl", "--beta_log", action="store_true", help="Use Logarithmic Beta scaling"

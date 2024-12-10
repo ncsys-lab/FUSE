@@ -43,8 +43,10 @@ class Logger:
 
     @staticmethod
     def get_plot_file(log_file, name=None):
-        plot_path = Path(log_file.replace("logs", "plots"))
-        filename = name if name is not None else plot_path.stem
-        plot_file = plot_path.parent.joinpath(filename)
-        plot_file.parent.mkdir(parents=True, exist_ok=True)
+        if name is not None:
+            plot_file = Path(f"plots/{name}")
+        else:
+            plot_path = Path(log_file.replace("logs", "plots"))
+            plot_file = plot_path.parent.joinpath(plot_path.stem)
+            plot_file.parent.mkdir(parents=True, exist_ok=True)
         return plot_file

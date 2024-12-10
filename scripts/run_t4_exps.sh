@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 printf "\n========TSP========\n"
 ./scripts/run_tsp_exp.sh
 printf "========TSP========\n"
