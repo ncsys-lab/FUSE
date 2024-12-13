@@ -110,7 +110,7 @@ parser.add_argument(
 Ensure that you have enough memory (ideally ~1.5GB per core). **Many issues with experiments hanging/ crashing are root-caused to the docker container running out of memory**. You will likely have to adjust the container's limit in the Docker Desktop app.
 ## Replicating Key Results
 ### Replicating Figures
-After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. The script will place the These plots are manually overlaid to create the figures 1A and 1B.
+After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. These plots are manually overlaid to create the figures 1A and 1B.
 
 ### Table IV
 You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional energy function experiments detailed in Table IV. You can also use `scripts/run_t4_exps.sh` to queue up all the experiments. Unless noted otherwise, all reported runtimes are from a consumer-grade laptop CPU with 10 cores and 16 GB of RAM. The conventional Steiner tree benchmarks take especially long - we have included the estimated runtime on a consumer grade CPU, as well as the runtime on a larger 32 core machine. We have made the log files for these runs available in case it is impractical to run these benchmarks.
@@ -124,7 +124,7 @@ You can use `scripts/run_{prob}_exp.sh` to run the encoded and conventional ener
 |Total||27:40|
 
 ### Table V
-You can use `scripts/run_t5_exps.sh` to run the encoded energy function scaling experiments detailed in Table V.
+You can use `scripts/run_t5_exps.sh` to run encoded energy function scaling experiments detailed in Table V.
 |Name|Runtime (HH:MM)|
 |--|--|
 |tsp|00:13|
@@ -254,7 +254,7 @@ def parse(inparser, subparser):
 ```
 Our problem is registered, and we can now start writing our energy function(s).
 ### Create a Conventional Energy Function
-Just as a Problem class is a template for generating problem instances, the Energy Function classes create methods to generate energy function instances for particular problem instances. Conventional Energy Functions inherit from the `ConvEfn` class in `problems/prob.py`, and must implement three methods, `__init__ and _gen_funcs`.
+Just as a Problem class is a template for generating problem instances, the Energy Function classes create methods to generate energy function instances for particular problem instances. Conventional Energy Functions inherit from the `ConvEfn` class in `problems/prob.py`, and must implement two methods, `__init__` and `_gen_funcs` (and can optionally override the `compile` method).
 
 The `init` method is similar to the Problem `init` in that it sets parameters for the problem (such as the number of elements) rather than values for a specific instance. It is called during the Problem `init` method is called, when the energy function is instantiated.
 ```
@@ -329,7 +329,8 @@ Finally, we return the generated functions and the total number of p-bits:
 
 The superclass compile method will inject the problem instance into the functions, JIT-compile them, and compute their Hessians to create the `J` matrix. It also performs a graph coloring on this matrix to find sets of spins that can be updated in parallel. Note that an alternative compile flow, where the energy function expressions are defined at problem-compile time can be found in `col`.
 
-Our energy function is fully defined and is ready to be used with the simulator. Execution flow goes as follows: 1. The main method will use the `parse` method to dispatch the arguments to the correct class:
+Our energy function is fully defined and is ready to be used with the simulator. Execution flow goes as follows:
+1. The main method will use the `parse` method to dispatch the arguments to the correct class:
 ```
 prob, args = parse(parser, subparsers)
 res = execute(prob, args)
@@ -360,7 +361,7 @@ def run(key, quick, iters, prob, efn, beta_i, betafn):
 The compile function returns a jax function `engradfn` which computes the energy and gradients over a set of spin variables, and the masks for parallel updates. From here, execution can begin.
 
 ### Create an Encoded Energy Function
-The process for creating Encoded energy functions is less involved. Encoded energy functions inherit from the `EncEfn` class, and must implement three methods: `__init__, circuit,` and `compile`.
+Encoded energy functions inherit from the `EncEfn` class, and must implement three methods: `__init__`, `circuit`, and `compile`.
 
 The purpse of the `init` method is mostly unchanged - we want to set variables that determine encoding circuit generation, although there are two notable differences: we call `super().__init__()` first, and we often set the `self.spins` variable to be a number, as opposed to a numpy array of symbols.
 ```
@@ -371,7 +372,7 @@ def __init__(self, n, cap, c_maxval):
     self.cap = cap
     self.c_maxval = c_maxval
 ```
-The `circuit` method is a forward method that transforms an input `spins` (decision variables), along with some metadata, into problem variables. Note that this must be a boolean => boolean relation. Additionally, we employ the optimization described in section V.B.2 of the paper, where we linearize the energy function in the outputs of the encoding circuit. Thus, one must ensure that their energy function can be expressed as a linear combination of problem variables. In the knapsack case, we add another variable that is true if the selected items are larger than the capacity and zero otherwise. For maximum performance, this function should be "jit-able" and use JAX operations.
+The `circuit` method is a forward method that transforms an input `spins` (decision variables), along with some metadata, into problem variables. Note that this must be a boolean => boolean relation. Additionally, we employ the optimization described in section V.B.2 of the paper, where we linearize the energy function in the outputs of the encoding circuit. Thus, one must ensure that their energy function can be expressed as a linear combination of problem variables. In the knapsack case, we add another variable that is true if the selected items are larger than the capacity and zero otherwise. For maximum performance, this function should be JAX jittable (although it does not __have__ to be, see last section).
 ```
 @staticmethod
 @jax.jit
