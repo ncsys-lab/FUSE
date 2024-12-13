@@ -254,7 +254,7 @@ def parse(inparser, subparser):
 ```
 Our problem is registered, and we can now start writing our energy function(s).
 ### Create a Conventional Energy Function
-Just as a Problem class is a template for generating problem instances, the Energy Function classes create methods to generate energy function instances for particular problem instances. Conventional Energy Functions inherit from the `ConvEfn` class in `problems/prob.py`, and must implement three methods, `__init__, _gen_exprs`, and `compile`.
+Just as a Problem class is a template for generating problem instances, the Energy Function classes create methods to generate energy function instances for particular problem instances. Conventional Energy Functions inherit from the `ConvEfn` class in `problems/prob.py`, and must implement three methods, `__init__ and _gen_funcs`.
 
 The `init` method is similar to the Problem `init` in that it sets parameters for the problem (such as the number of elements) rather than values for a specific instance. It is called during the Problem `init` method is called, when the energy function is instantiated.
 ```
@@ -264,61 +264,72 @@ def __init__(self, n, cap, c_maxval):
     self.c_maxval = c_maxval
     super().__init__()
 ```
-Be sure to call `super().__init__()` at the end of initialization to begin expression generation.
+Be sure to call `super().__init__()` at the end of initialization to begin function generation.
 
-For conventional energy functions, it is straightforward to generate a closed-form algebraic expression for the energy function over the spin variables. The `_gen_exprs` function is responsible for creating these expressions. We will break down the `knp` example, line-by-line.
+The `_gen_funcs` procedure is responsible for generating functions that compute the valid and cost portions of the energy fucntion, as well as determining the number of p-bits used. We will break down the `knp` example, line-by-line.
+
+`knp` is unique in that a portion of the spins are used to select the chosen items, while the rest are used to claim a particular weight for those chosen items. In the first few lines, we determine the numerical values associated with the latter group of spins, and then count the total number of p-bits we have.
 ```
-def _gen_exprs(self):
-    spins = np.array(sympy.symbols(f"s:{self.n}"))
-    costs = np.array(sympy.symbols(f"c:{self.n}"))
-    weights = np.array(sympy.symbols(f"w:{self.n}"))
-```
-We begin by using sympy to create symbolic variables for the spins. For a particular problem instance, the final energy function should only be a function of the spins, but we do not yet have a problem instance when this method is called at initialization time. Thus, we will also create symbolic variables for the problem instance variables, which will be substituted in at compile-time. We package these as numpy arrays in order to use vector operations for faster manipulation.
-```
+def _gen_funcs(self):
     cap = int(self.cap) + 1
     m = floor(log2(cap))
     vals = [1 << i for i in range(m)]
     vals.append(cap - (1 << m))
+    vals = jnp.asarray(vals)
 
-    w_spins = np.array(sympy.symbols(f"ws:{len(vals)}"))
-    vals = np.array(vals)
+    n_spins = len(vals) + self.n
 ```
-For Knapack, we have to add some additional variables for keeping track of the claimed weight of selected items. Now we have four symbolic arrays, `spins, w_spins, costs,` and `weights`. The former two are problem variables, and the latter two are instance variables.
-```
-    cost_expr = -np.dot(spins, costs)
-    weight_expr = np.dot(spins, weights)
-    cweight_expr = np.dot(w_spins, vals)
 
-    invalid_expr = self.c_maxval * self.n * (weight_expr - cweight_expr) ** 2
-    energy_expr = invalid_expr + cost_expr
+Here we define a JAX-jitted utility function to "dispatch" the spins - this breaks up the set of p-bits into a tuple two arrays depending on their purpose. This is useful for computing the energy.
 ```
-Now we create the algebraic expressions for the energy. We start by computing the cost of selected items, and negate the sum as a higher cost will lower our energy. We also compute the actual weight and the claimed weight. We create an `invalid_expr`, which raises the energy of invalid weight combinations by a large constant. Finally, we create the full `energy_expr` by summing the cost and invalid expressions.
+    @jax.jit
+    def dispatch_fn(spins):
+        return jnp.split(spins, [self.n])
 ```
-    self.costs = costs
-    self.weights = weights
-```
-We add the instance variable arrays as variables of the class. This is because we will have to reference the symbols later in order to make subsitutions at compile time.
-```
-    out_spins = np.hstack((spins, w_spins))
-    return energy_expr, out_spins
-```
-Finally, we flatten the spin array into one list, and return the energy expression and the list of spins. During initalization, the `ConvEfn` class will call `_gen_exprs` and compute their symbolic derivatives w.r.t the spin variables, leaving the instance variables symbolic. It also reduces squared variables to linear ones (as all values are boolean).
 
-The `compile` method is responsible for substituting in instance variables before calling the superclass `compile()`. It consumes a problem instance.
+Next, we define the `valid_fn`, which takes in the state and the particular problem instance we are solving and returns a value representing the energy penalty associated with invalid solutions. This should be a JAX-jittable function as well. We use `dispatch_fn` to separate the p-bits into groups and then compute the actual weight (`weight_expr`) and the claimed weight (`cweight_expr`).
 ```
-def compile(self, inst):
-    weights, costs = inst
-    weight_dict = {weight: inst_w for weight, inst_w in zip(self.weights, weights)}
-    cost_dict = {cost: inst_c for cost, inst_c in zip(self.costs, costs)}
-    sub_dict = {**weight_dict, **cost_dict}
-    return super().compile(sub_dict)
+    def valid_fn(spins, inst):
+        spins, w_spins = dispatch_fn(spins)
+        weights, _ = inst
+        weight_expr = jnp.dot(spins, weights)
+        cweight_expr = jnp.dot(w_spins, vals)
 ```
-We get the numpy arrays from the problem instance tuple, and create dictionaries that map instance variables to their value (this is why we needed to save the symbolic variables during `_gen_exprs`). For convenience, we create two separate dictionaries for the two sets of instance variables, and merge them. We then pass this substitution dictionary to the superclass `compile()` method.
 
-The superclass compile method will perform the requisite substitutions and create a set of matrices `J, h` that can be used to efficiently compute values and gradients of conventional energy functions. It also performs a graph coloring to find sets of spins that can be updated in parallel.
+An implementation detail is that, with the conventional energy functions, quadratic, single-variable terms in the energy function must be lowered to be linear (i.e. x_i^2 => x_i). Because the spins are binary, this does not affect the energy calculation, but ommitting this would make our gradient calculation incorrect. Thus, we must add a set of terms that will not change the energy but will "adjust" the gradients such that the terms appear linear. These terms usually take the form of `spin * (spin - 1)`.
+FUSE will check the Hessian of the energy function and will error if the diagonal terms are non-zero. You should adjust the derivatives (while ensuring the energy function is the same) until this condition is satisfied.
+```
+        adjust_derivs = jnp.dot(weights * weights, spins * (spins - 1)) + jnp.dot(
+            vals * vals, w_spins * (w_spins - 1)
+        )
+```
 
-Our energy function is fully defined and is ready to be used with the simulator. Execution flow goes as follows:
-1. The main method will use the `parse` method to dispatch the arguments to the correct class:
+Then we can compute the final energy penalty by multiplying the squared difference of `weight_expr` and `cweight_expr` (minus the adjusted derivative) by a large coefficient.
+```
+        return (
+            self.c_maxval
+            * self.n
+            * ((weight_expr - cweight_expr) ** 2 - adjust_derivs)
+        )
+```
+
+The `cost_fn` is more straightforward:
+```
+    def cost_fn(spins, inst):
+        spins, _ = dispatch_fn(spins)
+        _, costs = inst
+        return -jnp.dot(spins, costs)
+```
+In `knp`, we just return the negative value of the quantity we want to maximize, namely the sum of the selected items' cost.
+
+Finally, we return the generated functions and the total number of p-bits:
+```
+    return valid_fn, cost_fn, n_spins
+```
+
+The superclass compile method will inject the problem instance into the functions, JIT-compile them, and compute their Hessians to create the `J` matrix. It also performs a graph coloring on this matrix to find sets of spins that can be updated in parallel. Note that an alternative compile flow, where the energy function expressions are defined at problem-compile time can be found in `col`.
+
+Our energy function is fully defined and is ready to be used with the simulator. Execution flow goes as follows: 1. The main method will use the `parse` method to dispatch the arguments to the correct class:
 ```
 prob, args = parse(parser, subparsers)
 res = execute(prob, args)
