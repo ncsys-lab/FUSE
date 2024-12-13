@@ -97,7 +97,7 @@ For Table V experiments, please add `-i 5000000` to the command in order to refl
 ```
 python3 analyze.py exp_data/table_v/stp_n100_enc_b0.00_3.75_lin_s42/* -i 5000000
 ```
-## Setting Thread Count
+## Setting Thread Count + OOM Errors
 By default, FUSE is configured to use 10 threads. You should adjust the thread defaults to match your machine (file `solver.py`, line ~207):
 ```
 parser.add_argument("-t", "--trials", type=int, help="Number of trials")
@@ -107,7 +107,7 @@ parser.add_argument(
 parser.add_argument(
     "-i",
 ```
-Ensure that you have enough memory (ideally ~1.5GB per core) to prevent OOM errors (You may have to adjust the container's limit in the Docker Desktop app).
+Ensure that you have enough memory (ideally ~1.5GB per core). **Many issues with experiments hanging/ crashing are root-caused to the docker container running out of memory**. You will likely have to adjust the container's limit in the Docker Desktop app.
 ## Replicating Key Results
 ### Replicating Figures
 After the Kick-the-Tires Phase, you can use `scripts/gen_plots.sh` to generate 4 plots in the `plots/` directory. These plots require that you have run the first two commands in the KtT phase to generate the relevant logs, so ensure you have done so before trying to run the script. The script will place the These plots are manually overlaid to create the figures 1A and 1B.
@@ -152,18 +152,18 @@ Re-running the script will only print out results instead of re-running synthesi
 Note: No need to read further if you only want to replicate the above experiments. This section is intended for users who want to extend FUSE (e.g. by writing new problem definitions).
 The main command is `solver.py`:
 ```
-python3 solver.py [-h] [-t TRIALS] [-l] [-x THREADS] [-i ITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
+python3 solver.py [-h] [-t TRIALS] [-x THREADS] [-i ITERS] [-q QUALITERS] [-s SEED] [-f] [-bi BETA_INIT] [-be BETA_END] [-bl] [-lr LOG_RATE] [-o] {cut,col,tsp,iso,knp,stp} ...
 ```
 The options for the solver script are described here:
 ```
--h, --help            show help message and exit
--o, --overwrite       Overwrite existing log directory, if it exists (will error otherwise)
--t TRIALS             Number of trials (unique problems) to test. Prints stats for values > 1
--x THREADS            Number of threads to use for multiple trials
--l, --long            Disable early exiting to find best solution
--i ITERS              (Maximum) Number of iterations run
--s SEED,              Random seed used
--f, --enc             Use Encoded Energy Function instead of conventional (default)
+-h, --help            show this help message and exit
+-o, --overwrite       Overwrite existing directory, if it exists
+-t TRIALS 		      Number of trials (unique problems) to test. Prints stats for values > 1
+-x THREADS            THREADS Number of threads to use
+-i ITERS              (Maximum) number of iterations to run
+-q QUALITERS          Extra iterations to run after approx solution is found
+-s SEED, --seed SEED  Random Seed used
+-f, --enc             Use Encoded Energy Function
 -bi BETA_INIT         Initial Beta value (default 0)
 -be BETA_END          Log_10 of ending Beta value (default 0 => 1)
 -bl, --beta_log       Use Logarithmic schedule to raise beta instead of linear (default)
