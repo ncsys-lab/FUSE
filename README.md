@@ -363,7 +363,7 @@ The compile function returns a jax function `engradfn` which computes the energy
 ### Create an Encoded Energy Function
 Encoded energy functions inherit from the `EncEfn` class, and must implement three methods: `__init__`, `circuit`, and `compile`.
 
-The purpse of the `init` method is mostly unchanged - we want to set variables that determine encoding circuit generation, although there are two notable differences: we call `super().__init__()` first, and we often set the `self.spins` variable to be a number, as opposed to a numpy array of symbols.
+The purpse of the `init` method is mostly unchanged - we want to set variables that determine encoding circuit generation, with the notable difference that we call `super().__init__()` first.
 ```
 def __init__(self, n, cap, c_maxval):
     super().__init__()
