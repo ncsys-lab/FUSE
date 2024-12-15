@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from numpy.core.multiarray import where
 
 from .prob import ConvEfn, EncEfn, Prob
 
@@ -85,34 +86,40 @@ class StpEncEfn(EncEfn):
         self.spins = self.n - self.t
 
     def compile(self, inst):
-        g = nx.Graph()
-        for i in range(self.n):
-            g.add_node(i)
-
-        idx = 0
-        for i in range(self.n):
-            for j in range(i + 1, self.n):
-                g.add_edge(i, j, weight=inst[idx])
-                idx += 1
-
-        term_nodes = np.arange(self.t)
-        st_nodes = np.arange(self.t, self.n)
-
-        def mst_callback(state):
-            ind_nodes = np.append(term_nodes, st_nodes[state.astype(bool)])
-            ind_g = nx.induced_subgraph(g, ind_nodes)
-            edges = nx.minimum_spanning_tree(ind_g, algorithm="prim").edges
-            adj = np.zeros((self.n, self.n), dtype=bool)
-            adj[tuple(np.array(edges).T)] = True
-            return adj[np.triu_indices(self.n, k=1)]
+        adj_mat = jnp.zeros(shape=(self.n, self.n))
+        adj_mat = adj_mat.at[jnp.triu_indices_from(adj_mat, k=1)].set(inst)
+        adj_mat += adj_mat.T
 
         @jax.jit
         def circuitfn(state):
-            return jax.pure_callback(
-                mst_callback,
-                jax.ShapeDtypeStruct((self.n * (self.n - 1) // 2,), dtype="bool"),
-                state,
-            )
+            n = self.t + state.sum()
+            parents = jnp.full(self.n, -1, dtype=int)
+            incs = jnp.append(jnp.zeros(self.t, dtype=bool), ~state)
+
+            keys = jnp.full(self.n, jnp.inf)
+            keys = keys.at[0].set(0)
+
+            def inner_loop(state):
+                i, inc, key, parent = state
+                min_v = jnp.argmin(jnp.where(inc, jnp.inf, key))
+                inc = inc.at[min_v].set(True)
+                cond = ~inc & (adj_mat[min_v] < key)
+                key = jnp.where(cond, adj_mat[min_v], key)
+                parent = jnp.where(cond, min_v, parent)
+                return (i + 1, inc, key, parent)
+
+            def cond_fn(state):
+                i, _, _, _ = state
+                return i < n - 1
+
+            state = (0, incs, keys, parents)
+            _, _, _, parent = jax.lax.while_loop(cond_fn, inner_loop, state)
+
+            res = jnp.zeros((self.n, self.n), dtype=bool)
+            idx_0 = jnp.where(parent != -1, jnp.arange(self.n), -1)
+            res = res.at[idx_0, parent].set(True)
+            res += res.T
+            return res[jnp.triu_indices(self.n, k=1)]
 
         return super().compile(inst, circuitfn)
 
