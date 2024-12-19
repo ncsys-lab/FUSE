@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from numpy.core.multiarray import where
 
 from .prob import ConvEfn, EncEfn, Prob
 
