@@ -390,4 +390,4 @@ def compile(self, inst):
 ```
 The super `compile` method uses the differentation trick described in the paper to generate the `engradfn`. By default, the updates are all serial, although in some cases, it is possible to pass in a set of masks that define parallel updates for Encoded formulations. See `problems/col.py` for an example.
 #### Using Non-JAX functions
-We have written that any boolean input-output relation can be used as an encoding circuit. This extends to algorithms that may not be easily expressed in JAX. For this, we use a `jax.pure_callback` to call into other code. See `problems/stp.py` for an example using networkx's MST algorithm.
+We have written that any boolean input-output relation can be used as an encoding circuit. This extends to algorithms that may not be easily expressed in JAX. For this, one can use a `jax.pure_callback` to call into other code.
